@@ -1,5 +1,5 @@
 // Script executado no contexto MAIN da pagina (world: "MAIN")
-// Instrumenta APIs nativas para detectar criacao e insercao dinamica de scripts e iframes via JS
+// Instrumenta APIs nativas de forma puramente observadora e 100% compativel com Trusted Types e CSP restrita
 
 (() => {
   if ((window as unknown as { __yaps_main_injected?: boolean }).__yaps_main_injected) {
@@ -13,7 +13,7 @@
     for (const line of lines) {
       if (line.includes("http://") || line.includes("https://")) {
         const match = line.match(/(https?:\/\/[^\s:)]+)/);
-        if (match && !match[1].includes("yaps") && !match[1].includes("main-injector")) {
+        if (match && !match[1].includes("yaps") && !match[1].includes("content-main")) {
           return match[1];
         }
       }
@@ -22,24 +22,34 @@
   }
 
   function notifyInjection(url: string, type: "script" | "iframe", initiator?: string) {
-    if (!url || url.startsWith("javascript:") || url.startsWith("about:")) {
+    if (
+      !url ||
+      typeof url !== "string" ||
+      url.startsWith("javascript:") ||
+      url.startsWith("about:") ||
+      url.startsWith("blob:")
+    ) {
       return;
     }
 
-    window.postMessage(
-      {
-        source: "YAPS_MAIN_INJECTOR",
-        type: "DYNAMIC_INJECTION",
-        url,
-        resourceType: type,
-        initiator,
-        timestamp: Date.now(),
-      },
-      "*",
-    );
+    try {
+      window.postMessage(
+        {
+          source: "YAPS_MAIN_INJECTOR",
+          type: "DYNAMIC_INJECTION",
+          url,
+          resourceType: type,
+          initiator,
+          timestamp: Date.now(),
+        },
+        "*",
+      );
+    } catch {
+      // Ignora em caso de isolamento extremo
+    }
   }
 
-  // Intercepta document.createElement
+  // Intercepta document.createElement para anotar caller origin sem modificar propriedades nativas
   const originalCreateElement = document.createElement.bind(document);
 
   document.createElement = (<K extends keyof HTMLElementTagNameMap>(
@@ -50,45 +60,39 @@
     const tagLower = String(tagName).toLowerCase();
 
     if (tagLower === "script" || tagLower === "iframe") {
-      const stack = new Error().stack;
-      const caller = extractCallerScript(stack);
-      if (caller) {
-        element.setAttribute("data-yaps-origin", caller);
+      try {
+        const stack = new Error().stack;
+        const caller = extractCallerScript(stack);
+        if (caller && element.dataset) {
+          element.dataset.yapsOrigin = caller;
+        }
+      } catch {
+        // Ignora silenciosamente para nunca quebrar a aplicacao
       }
-
-      // Intercepta atribuicao da propriedade .src
-      let currentSrc = "";
-      Object.defineProperty(element, "src", {
-        get() {
-          return currentSrc;
-        },
-        set(val: string) {
-          currentSrc = String(val);
-          element.setAttribute("src", currentSrc);
-          notifyInjection(currentSrc, tagLower as "script" | "iframe", caller);
-        },
-        configurable: true,
-      });
     }
 
     return element;
   }) as typeof document.createElement;
 
-  // Intercepta Node.prototype.appendChild e insertBefore para capturar tags anexadas
+  // Intercepta Node.prototype.appendChild de forma puramente passiva (sem mutar argumentos)
   const originalAppendChild = Node.prototype.appendChild;
   Node.prototype.appendChild = function <T extends Node>(node: T): T {
-    if (node instanceof HTMLElement) {
-      const tag = node.tagName.toLowerCase();
-      if (tag === "script" || tag === "iframe") {
-        const src = node.getAttribute("src");
-        const origin = node.getAttribute("data-yaps-origin");
-        if (src) {
-          notifyInjection(src, tag as "script" | "iframe", origin || undefined);
+    try {
+      if (node instanceof HTMLElement) {
+        const tag = node.tagName.toLowerCase();
+        if (tag === "script" || tag === "iframe") {
+          const src = node.getAttribute("src") || (node as unknown as HTMLScriptElement).src;
+          const origin = node.dataset?.yapsOrigin;
+          if (src && typeof src === "string") {
+            notifyInjection(src, tag as "script" | "iframe", origin || undefined);
+          }
         }
       }
+    } catch {
+      // Nunca quebra a aplicacao que chamou appendChild
     }
     return originalAppendChild.call(this, node) as T;
   };
 
-  console.debug("[YAPS] Main World DOM hooks ativados.");
+  console.debug("[YAPS] Main World DOM hooks ativos (Trusted Types safe).");
 })();

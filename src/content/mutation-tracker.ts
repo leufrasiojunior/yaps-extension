@@ -15,13 +15,17 @@ export class MutationTracker {
     // 1. Escuta notificacoes do Main World Injector (hooks nativos)
     window.addEventListener("message", this.handleWindowMessage);
 
-    // 2. Observa insercoes de nós na arvore DOM
+    // 2. Observa insercoes de nós e atributos na arvore DOM
     this.observer = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
-        for (const node of mutation.addedNodes) {
-          if (node instanceof HTMLElement) {
-            this.inspectNode(node);
+        if (mutation.type === "childList") {
+          for (const node of mutation.addedNodes) {
+            if (node instanceof HTMLElement) {
+              this.inspectNode(node);
+            }
           }
+        } else if (mutation.type === "attributes" && mutation.target instanceof HTMLElement) {
+          this.inspectNode(mutation.target);
         }
       }
     });
@@ -30,6 +34,8 @@ export class MutationTracker {
       this.observer.observe(document.documentElement, {
         childList: true,
         subtree: true,
+        attributes: true,
+        attributeFilter: ["src", "data-src"],
       });
       // Inspeciona nos que ja existiam ao carregar
       this.inspectInitialDom();
@@ -39,6 +45,8 @@ export class MutationTracker {
           this.observer.observe(document.documentElement, {
             childList: true,
             subtree: true,
+            attributes: true,
+            attributeFilter: ["src", "data-src"],
           });
           this.inspectInitialDom();
         }
@@ -63,19 +71,30 @@ export class MutationTracker {
 
   private inspectNode(el: HTMLElement): void {
     const tag = el.tagName.toLowerCase();
-    const src = el.getAttribute("src") || el.getAttribute("data-src");
-    const origin = el.getAttribute("data-yaps-origin");
+    const src =
+      el.getAttribute("src") ||
+      el.getAttribute("data-src") ||
+      (el as unknown as HTMLScriptElement).src;
+    const origin = el.dataset?.yapsOrigin || el.getAttribute("data-yaps-origin");
     const classOrId = `${el.className || ""} ${el.id || ""}`;
-    const rect = el.getBoundingClientRect();
+    let width = 0;
+    let height = 0;
+    try {
+      const rect = el.getBoundingClientRect();
+      width = Math.round(rect.width);
+      height = Math.round(rect.height);
+    } catch {
+      // Elemento pode estar desconectado
+    }
 
-    if (src && !this.seenUrls.has(src)) {
+    if (src && typeof src === "string" && !this.seenUrls.has(src)) {
       this.seenUrls.add(src);
       const candidate = evaluateCandidate(src, this.pageContext.domain, "main_world_dom_mutation", {
         elementTag: tag,
         initiatorScript: origin || undefined,
         classOrId,
-        width: Math.round(rect.width),
-        height: Math.round(rect.height),
+        width,
+        height,
       });
 
       if (candidate) {

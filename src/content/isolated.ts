@@ -9,24 +9,6 @@ import { MutationTracker } from "./mutation-tracker";
     title: document.title,
   };
 
-  // Garante que o Main Injector seja inserido se a flag nativa do manifest nao o executou
-  function ensureMainInjector(): void {
-    if (document.getElementById("yaps-main-injector-tag")) {
-      return;
-    }
-    try {
-      const script = document.createElement("script");
-      script.id = "yaps-main-injector-tag";
-      script.src = chrome.runtime.getURL("content-main.js");
-      script.onload = () => script.remove();
-      (document.head || document.documentElement).appendChild(script);
-    } catch {
-      // Ignora restricoes de CSP estrita se o manifest world MAIN ja cuidou disso
-    }
-  }
-
-  ensureMainInjector();
-
   const tracker = new MutationTracker(pageContext);
   tracker.start();
 
