@@ -19,7 +19,7 @@
 }
 
 body {
-  width: 320px;
+  width: 360px;
   background-color: var(--background);
   color: var(--foreground);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell,
@@ -33,8 +33,8 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -75,6 +75,36 @@ body {
   color: var(--destructive);
 }
 
+/* Abas */
+.tabs-nav {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
+  gap: 4px;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 6px 12px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+  color: var(--foreground);
+}
+
+.tab-btn.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
 .card {
   background-color: var(--card);
   border: 1px solid var(--border);
@@ -96,18 +126,18 @@ body {
   letter-spacing: 0.5px;
 }
 
-.field input {
+.field input, .field select {
   width: 100%;
   padding: 8px 10px;
-  background-color: var(--background);
+  background-color: #09090b;
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--foreground);
-  font-size: 13px;
-  outline: none;
+  font-size: 12px;
 }
 
-.field input:focus {
+.field input:focus, .field select:focus {
+  outline: none;
   border-color: var(--primary);
 }
 
@@ -115,29 +145,33 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
-  padding: 8px 12px;
+  gap: 6px;
+  padding: 8px 14px;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   border: none;
-  transition: opacity 0.15s ease;
-  gap: 6px;
-}
-
-.btn:hover {
-  opacity: 0.9;
-}
-
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+  transition: background-color 0.2s ease;
+  width: 100%;
 }
 
 .btn-primary {
   background-color: var(--primary);
   color: var(--primary-foreground);
+}
+
+.btn-primary:hover {
+  background-color: #2563eb;
+}
+
+.btn-success {
+  background-color: #15803d;
+  color: #ffffff;
+}
+
+.btn-success:hover {
+  background-color: #16a34a;
 }
 
 .btn-outline {
@@ -146,10 +180,19 @@ body {
   color: var(--foreground);
 }
 
+.btn-outline:hover {
+  background-color: var(--muted);
+}
+
 .btn-destructive {
-  background-color: transparent;
+  background-color: rgba(239, 68, 68, 0.15);
   color: var(--destructive);
   border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.btn-destructive:hover {
+  background-color: var(--destructive);
+  color: #ffffff;
 }
 
 .stats-grid {
@@ -160,38 +203,122 @@ body {
 }
 
 .stat-box {
-  background-color: var(--background);
-  padding: 8px;
-  border-radius: 6px;
+  background-color: var(--card);
   border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
 }
 
 .stat-label {
-  font-size: 10px;
+  display: block;
+  font-size: 11px;
   color: var(--muted-foreground);
+  margin-bottom: 2px;
 }
 
 .stat-value {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
-  margin-top: 2px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Seção de Alvos */
+.targets-section {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background-color: var(--card);
+  overflow: hidden;
+}
+
+.targets-header {
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  border-bottom: 1px solid var(--border);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.targets-list {
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.target-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-bottom: 1px solid #27272a;
+  gap: 8px;
+}
+
+.target-row:last-child {
+  border-bottom: none;
+}
+
+.target-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  gap: 2px;
+}
+
+.target-domain {
+  font-family: monospace;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.target-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+}
+
+.btn-quick-block {
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  background-color: #dc2626;
+  color: #ffffff;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-quick-block:hover {
+  background-color: #b91c1c;
+}
+
+.btn-quick-block.blocked {
+  background-color: #27272a;
+  color: #71717a;
+  cursor: default;
+}
+
+.empty-targets {
+  padding: 16px 10px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+
+.helper-text {
+  font-size: 11px;
+  color: var(--muted-foreground);
+  margin-top: 8px;
 }
 
 .toggle-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 0;
-  border-top: 1px solid var(--border);
-  margin-top: 8px;
-}
-
-.helper-text {
-  font-size: 11px;
-  color: var(--muted-foreground);
-  margin-top: 6px;
-  text-align: center;
 }

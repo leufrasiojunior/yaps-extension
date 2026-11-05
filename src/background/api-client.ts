@@ -1,4 +1,10 @@
-import type { ExtensionSettings, PairingResponse, ReportExtensionPayload } from "../shared/types";
+import type {
+  DetectedTarget,
+  ExtensionSettings,
+  PageContext,
+  PairingResponse,
+  ReportExtensionPayload,
+} from "../shared/types";
 import { extensionStorage } from "./storage";
 
 export class YapdApiClient {
@@ -12,7 +18,7 @@ export class YapdApiClient {
   async pair(
     yapdBaseUrl: string,
     pairingCode: string,
-    deviceName = "YAPS Chrome Sentinel",
+    deviceName = "YAPD Sentinel Browser",
   ): Promise<PairingResponse> {
     const endpoint = this.getApiEndpoint(yapdBaseUrl, "browser-extension/pair");
 
@@ -26,7 +32,7 @@ export class YapdApiClient {
         extensionName: deviceName,
         browser: "Chrome",
         manifestVersion: 3,
-        extensionVersion: "0.1.0",
+        extensionVersion: "0.2.0",
       }),
     });
 
@@ -45,7 +51,7 @@ export class YapdApiClient {
   async sendReport(payload: ReportExtensionPayload): Promise<{ batchId: string } | null> {
     const state = await extensionStorage.getState();
     if (!state.paired || !state.token) {
-      console.warn("[YAPS] Extensão não está pareada. Relatório ignorado.");
+      console.warn("[YAPD Sentinel] Extensão não está pareada. Relatório ignorado.");
       return null;
     }
 
@@ -62,7 +68,7 @@ export class YapdApiClient {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[YAPS] Falha ao enviar relatório (${response.status}): ${errorText}`);
+      console.error(`[YAPD Sentinel] Falha ao enviar relatório (${response.status}): ${errorText}`);
       if (response.status === 401 || response.status === 403) {
         // Token revogado ou inválido
         await extensionStorage.disconnect();
@@ -71,6 +77,77 @@ export class YapdApiClient {
     }
 
     return (await response.json()) as { batchId: string };
+  }
+
+  async applyBlockTarget(
+    target: string,
+    page: PageContext,
+    targetItem?: DetectedTarget,
+    kind: "exact" | "regex" = "exact",
+  ): Promise<{ success: boolean; message?: string }> {
+    const state = await extensionStorage.getState();
+    if (!state.paired || !state.token || !state.extensionId) {
+      return { success: false, message: "Extensão não conectada ao YAPD." };
+    }
+
+    const endpoint = this.getApiEndpoint(state.yapdBaseUrl, "browser-extension/detections/apply");
+
+    const normalizedTarget = target.toLowerCase().trim();
+    const payload = {
+      source: "browser_extension",
+      extension: {
+        name: state.deviceName,
+        extensionId: state.extensionId,
+        version: "0.2.0",
+        browser: "Chrome",
+        manifestVersion: 3,
+      },
+      clientRequestId: `req-block-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      page: {
+        url: page.url,
+        domain: page.domain,
+        title: state.settings.sendPageTitle ? page.title : undefined,
+      },
+      action: "apply_user_approved_detections",
+      approvedTargets: [
+        {
+          candidateId: targetItem?.candidateId || `cand-manual-${Date.now()}`,
+          target: normalizedTarget,
+          type: "deny",
+          kind,
+          category: targetItem?.category || "ads",
+          score: targetItem?.score || 95,
+          riskLevel: targetItem?.riskLevel || "high",
+          reasons: targetItem?.reasons || ["Bloqueado diretamente pelo usuário no YAPD Sentinel"],
+          evidence: {
+            url: targetItem?.evidence.url || page.url,
+            source: targetItem?.evidence.source || "user_inspector_click",
+            isThirdParty: true,
+            resourceType: targetItem?.evidence.resourceType || "script",
+          },
+        },
+      ],
+    };
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${state.token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        return { success: false, message: `Erro ao aplicar bloqueio (${response.status}): ${errorText}` };
+      }
+
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: (err as Error).message };
+    }
   }
 
   async fetchConfig(): Promise<{ settings: ExtensionSettings } | null> {
@@ -91,7 +168,7 @@ export class YapdApiClient {
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) {
           console.warn(
-            "[YAPS] Token de pareamento rejeitado pelo YAPD (banco resetado ou dispositivo revogado). Desconectando.",
+            "[YAPD Sentinel] Token de pareamento rejeitado pelo YAPD (banco resetado ou dispositivo revogado). Desconectando.",
           );
           await extensionStorage.disconnect();
         }
@@ -100,11 +177,11 @@ export class YapdApiClient {
 
       const data = (await response.json()) as { settings: ExtensionSettings };
       if (data.settings) {
-        await extensionStorage.setState({ settings: data.settings });
+        await extensionStorage.setState({ settings: { ...state.settings, ...data.settings } });
       }
       return data;
     } catch (err) {
-      console.warn("[YAPS] Erro ao sincronizar configurações do YAPD:", err);
+      console.warn("[YAPD Sentinel] Erro ao sincronizar configurações do YAPD:", err);
       return null;
     }
   }

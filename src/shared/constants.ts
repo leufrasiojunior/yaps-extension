@@ -1,9 +1,13 @@
 import type { ExtensionSettings, ExtensionStorageState } from "./types";
 
+export const DEFAULT_MIN_SCORE_THRESHOLD = 30;
+
 export const DEFAULT_EXTENSION_SETTINGS: ExtensionSettings = {
   sendPageTitle: true,
   hardBlockedUrlPatterns: [],
   sensitiveUrlPatterns: ["*://*.bank*", "*://*.gov.br*", "*://login.*", "*://auth.*"],
+  minScoreThreshold: DEFAULT_MIN_SCORE_THRESHOLD,
+  autoSendToYapd: false, // Por padrão, mantém na memória local da aba; envia sob demanda ou ao bloquear
 };
 
 export const DEFAULT_STORAGE_STATE: ExtensionStorageState = {
@@ -11,7 +15,7 @@ export const DEFAULT_STORAGE_STATE: ExtensionStorageState = {
   paired: false,
   token: null,
   extensionId: null,
-  deviceName: "YAPS Sentinel Browser",
+  deviceName: "YAPD Sentinel Browser",
   settings: DEFAULT_EXTENSION_SETTINGS,
   activeInspectionEnabled: true,
 };
@@ -23,6 +27,9 @@ export const KNOWN_AD_DOMAINS_PATTERNS = [
   /criteo\.(com|net)/i,
   /taboola\.com/i,
   /outbrain\.com/i,
+  /teads\.tv/i,
+  /onetag-sys\.com/i,
+  /2mdn\.net/i,
   /adnxs\.com/i,
   /rubiconproject\.com/i,
   /pubmatic\.com/i,
@@ -38,6 +45,10 @@ export const KNOWN_AD_DOMAINS_PATTERNS = [
   /adserver/i,
   /tracking/i,
   /telemetry/i,
+  /pixel/i,
+  /beacon/i,
+  /analytics/i,
+  /sponsor/i,
 ];
 
 export const KNOWN_AD_CONTAINER_CLASSES_OR_IDS = [
@@ -50,6 +61,15 @@ export const KNOWN_AD_CONTAINER_CLASSES_OR_IDS = [
   "taboola-container",
   "outbrain-widget",
   "dfp-ad",
+  "publicidade",
+  "patrocinado",
+  "anuncio",
+  "propaganda",
+  "adserver",
+  "banner",
+  "ad-wrapper",
+  "ad-unit",
+  "native-ad",
 ];
 
 export const IAB_AD_DIMENSIONS = [

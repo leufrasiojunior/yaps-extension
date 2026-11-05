@@ -13,6 +13,10 @@ export type DetectionEvidence = {
   elementTag?: string;
   initiatorScript?: string;
   timestamp?: number;
+  domPathHash?: string;
+  elementId?: string;
+  elementClasses?: string[];
+  dimensions?: { width: number; height: number };
 };
 
 export type DetectedTarget = {
@@ -52,6 +56,8 @@ export type ExtensionSettings = {
   sendPageTitle: boolean;
   hardBlockedUrlPatterns: string[];
   sensitiveUrlPatterns: string[];
+  minScoreThreshold: number;
+  autoSendToYapd: boolean;
 };
 
 export type ExtensionStorageState = {
@@ -85,6 +91,9 @@ export type RuntimeMessage =
   | { type: "START_ELEMENT_PICKER" }
   | { type: "STOP_ELEMENT_PICKER" }
   | { type: "GET_PAGE_SUMMARY"; pageDomain?: string; tabId?: number }
+  | { type: "SAVE_PAGE_ANALYSIS_TO_YAPD"; tabId: number; pageDomain?: string }
+  | { type: "QUICK_BLOCK_TARGET"; target: string; kind?: "exact" | "regex"; tabId?: number }
+  | { type: "QUICK_ALLOW_TARGET"; target: string; tabId?: number }
   | {
       type: "MAIN_WORLD_INJECTION_DETECTED";
       scriptUrl?: string;

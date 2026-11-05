@@ -67,6 +67,39 @@ export function matchesAdClassOrId(identifier: string): boolean {
   return KNOWN_AD_CONTAINER_CLASSES_OR_IDS.some((token) => lower.includes(token));
 }
 
+export function matchesAnyPattern(url: string, patterns: string[]): boolean {
+  if (!patterns || patterns.length === 0) return false;
+  const lowerUrl = url.toLowerCase();
+  return patterns.some((pattern) => {
+    try {
+      const regex = new RegExp(`^${pattern.replace(/\./g, "\\.").replace(/\*/g, ".*")}$`, "i");
+      return regex.test(lowerUrl);
+    } catch {
+      return false;
+    }
+  });
+}
+
+export function calculateDomPathHash(element: Element): string {
+  const path: string[] = [];
+  let current: Element | null = element;
+
+  while (current && path.length < 8) {
+    path.push(
+      `${current.tagName.toLowerCase()}#${current.id || ""}.${[...current.classList].slice(0, 3).join(".")}`,
+    );
+    current = current.parentElement;
+  }
+
+  let hash = 0;
+  for (const char of path.join(">").split("")) {
+    hash = (hash << 5) - hash + char.charCodeAt(0);
+    hash |= 0;
+  }
+
+  return String(hash);
+}
+
 export function evaluateCandidate(
   rawUrl: string,
   pageHostname: string,
@@ -77,6 +110,9 @@ export function evaluateCandidate(
     width?: number;
     height?: number;
     classOrId?: string;
+    elementId?: string;
+    elementClasses?: string[];
+    domPathHash?: string;
   },
 ): DetectedTarget | null {
   const hostname = extractHostname(rawUrl);
@@ -110,7 +146,9 @@ export function evaluateCandidate(
   if (source === "main_world_dom_mutation") {
     reasons.push("Dynamically injected into DOM via JavaScript");
     score += 20;
-    category = "ads";
+    if (category === "third_party") {
+      category = "ads";
+    }
   }
 
   if (extra?.initiatorScript) {
@@ -143,7 +181,8 @@ export function evaluateCandidate(
   let riskLevel: RiskLevel = "low";
   if (score >= 70) {
     riskLevel = "high";
-  } else if (score >= 40) {
+  } else if (score >= 30) {
+    // Limiar ajustado para 30 conforme solicitado
     riskLevel = "medium";
   }
 
@@ -163,6 +202,11 @@ export function evaluateCandidate(
       isThirdParty: thirdParty,
       elementTag: extra?.elementTag,
       initiatorScript: extra?.initiatorScript,
+      domPathHash: extra?.domPathHash,
+      elementId: extra?.elementId,
+      elementClasses: extra?.elementClasses,
+      dimensions:
+        extra?.width && extra?.height ? { width: extra.width, height: extra.height } : undefined,
       timestamp: Date.now(),
     },
   };

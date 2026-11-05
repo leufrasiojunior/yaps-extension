@@ -9,172 +9,186 @@ import type {
 import { yapdApiClient } from "./api-client";
 import { extensionStorage } from "./storage";
 
-interface PageBatchState {
+interface TabSessionState {
+  tabId: number;
   page: PageContext;
-  items: Map<string, DetectedTarget>;
-  reportedTargets: Map<string, DetectedTarget>;
-  timer: ReturnType<typeof setTimeout> | null;
-  tabId?: number;
+  targets: Map<string, DetectedTarget>;
+  savedToYapd: boolean;
+  debounceTimer: ReturnType<typeof setTimeout> | null;
 }
 
 export class BatchQueueManager {
-  private batches = new Map<string, PageBatchState>();
+  private sessions = new Map<number, TabSessionState>();
+  private domainFallbackMap = new Map<string, TabSessionState>();
 
-  private getBatchKey(page: PageContext): string {
-    return extractMainDomain(page.domain);
+  constructor() {
+    if (typeof chrome !== "undefined" && chrome.tabs?.onRemoved) {
+      chrome.tabs.onRemoved.addListener((closedTabId) => {
+        this.clearSession(closedTabId);
+      });
+    }
+  }
+
+  private clearSession(tabId: number): void {
+    const session = this.sessions.get(tabId);
+    if (session?.debounceTimer) {
+      clearTimeout(session.debounceTimer);
+    }
+    this.sessions.delete(tabId);
   }
 
   enqueue(page: PageContext, target: DetectedTarget, tabId?: number, immediate = false): void {
-    const key = this.getBatchKey(page);
-    let batch = this.batches.get(key);
-
-    if (!batch) {
-      batch = {
-        page,
-        items: new Map<string, DetectedTarget>(),
-        reportedTargets: new Map<string, DetectedTarget>(),
-        timer: null,
-        tabId,
-      };
-      this.batches.set(key, batch);
-    } else {
-      // Atualiza o contexto se a nova pagina tiver título ou url mais canônica
-      if (page.title && !batch.page.title) {
-        batch.page.title = page.title;
-      }
-    }
-
-    if (tabId) {
-      batch.tabId = tabId;
-    }
-
-    // Se o alvo já foi reportado nesta sessão de página com score igual ou maior, ignora
-    const alreadyReported = batch.reportedTargets.get(target.target);
-    if (alreadyReported && alreadyReported.score >= target.score) {
+    if (!tabId || tabId <= 0) {
       return;
     }
 
-    // Deduplica nos itens pendentes mantendo o de maior score
-    const existing = batch.items.get(target.target);
+    let session = this.sessions.get(tabId);
+
+    if (!session) {
+      session = {
+        tabId,
+        page,
+        targets: new Map<string, DetectedTarget>(),
+        savedToYapd: false,
+        debounceTimer: null,
+      };
+      this.sessions.set(tabId, session);
+    } else {
+      // Se o domínio da página mudou na mesma aba (usuário navegou para outro site), reseta a sessão da aba
+      const currentMain = extractMainDomain(session.page.domain);
+      const newMain = extractMainDomain(page.domain);
+      if (currentMain !== newMain) {
+        if (session.debounceTimer) {
+          clearTimeout(session.debounceTimer);
+        }
+        session.page = page;
+        session.targets.clear();
+        session.savedToYapd = false;
+        session.debounceTimer = null;
+      } else if (page.title && !session.page.title) {
+        session.page.title = page.title;
+      }
+    }
+
+    // Deduplica o alvo mantendo o de maior pontuação
+    const existing = session.targets.get(target.target);
     if (existing && existing.score >= target.score) {
       return;
     }
 
-    batch.items.set(target.target, target);
+    session.targets.set(target.target, target);
+    this.domainFallbackMap.set(extractMainDomain(session.page.domain), session);
 
-    const totalUniqueCount = batch.reportedTargets.size + batch.items.size;
-
-    if (batch.tabId && typeof chrome !== "undefined" && chrome.action) {
+    // Atualiza o badge do Chrome para a aba com a contagem real
+    const totalCount = session.targets.size;
+    if (typeof chrome !== "undefined" && chrome.action) {
       chrome.action.setBadgeText({
-        tabId: batch.tabId,
-        text: String(totalUniqueCount),
+        tabId,
+        text: String(totalCount),
       });
       chrome.action.setBadgeBackgroundColor({
-        tabId: batch.tabId,
+        tabId,
         color: "#dc2626",
       });
     }
 
-    if (immediate || batch.items.size >= MAX_BATCH_SIZE) {
-      this.flush(key);
-      return;
-    }
+    // Se o envio automático contínuo estiver ativado nas configurações ou for imediato
+    extensionStorage.getState().then((state) => {
+      if (state.settings.autoSendToYapd || immediate) {
+        if (immediate || session.targets.size >= MAX_BATCH_SIZE) {
+          this.flushSession(tabId);
+          return;
+        }
 
-    if (batch.timer) {
-      clearTimeout(batch.timer);
-    }
+        if (session.debounceTimer) {
+          clearTimeout(session.debounceTimer);
+        }
 
-    batch.timer = setTimeout(() => {
-      this.flush(key);
-    }, BATCH_DEBOUNCE_MS);
+        session.debounceTimer = setTimeout(() => {
+          this.flushSession(tabId);
+        }, BATCH_DEBOUNCE_MS);
+      }
+    });
   }
 
-  async flush(batchKey: string): Promise<void> {
-    const batch = this.batches.get(batchKey);
-    if (!batch || batch.items.size === 0) {
-      return;
+  async flushSession(tabId: number): Promise<{ success: boolean; batchId?: string }> {
+    const session = this.sessions.get(tabId);
+    if (!session || session.targets.size === 0) {
+      return { success: false };
     }
 
-    if (batch.timer) {
-      clearTimeout(batch.timer);
-      batch.timer = null;
+    if (session.debounceTimer) {
+      clearTimeout(session.debounceTimer);
+      session.debounceTimer = null;
     }
 
     const state = await extensionStorage.getState();
     if (!state.paired || !state.extensionId) {
-      return;
+      return { success: false };
     }
 
     const metadata: ExtensionMetadata = {
       name: state.deviceName,
       extensionId: state.extensionId,
-      version: "0.1.0",
+      version: "0.2.0",
       browser: "Chrome",
       manifestVersion: 3,
     };
 
-    const itemsToSend = Array.from(batch.items.values());
-
-    // Marca como reportados e limpa a fila de pendentes para não re-enviar repetidamente
-    for (const item of itemsToSend) {
-      batch.reportedTargets.set(item.target, item);
-    }
-    batch.items.clear();
+    const itemsToSend = Array.from(session.targets.values());
 
     const payload: ReportExtensionPayload = {
       source: "browser_extension",
       extension: metadata,
       clientRequestId: `req-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       page: {
-        url: batch.page.url,
-        domain: batch.page.domain,
-        title: state.settings.sendPageTitle ? batch.page.title : undefined,
+        url: session.page.url,
+        domain: session.page.domain,
+        title: state.settings.sendPageTitle ? session.page.title : undefined,
       },
       action: "report_detected_items",
       detectedTargets: itemsToSend,
     };
 
     try {
-      await yapdApiClient.sendReport(payload);
+      const res = await yapdApiClient.sendReport(payload);
+      if (res?.batchId) {
+        session.savedToYapd = true;
+        return { success: true, batchId: res.batchId };
+      }
+      return { success: false };
     } catch (err) {
-      console.error("[YAPS] Erro ao despachar lote:", err);
+      console.error("[YAPD Sentinel] Erro ao despachar análise para o YAPD:", err);
+      return { success: false };
     }
   }
 
-  getPageSummary(pageDomain?: string, tabId?: number): { count: number; targets: DetectedTarget[] } {
-    if (tabId) {
-      for (const batch of this.batches.values()) {
-        if (batch.tabId === tabId) {
-          const allTargets = new Map([...batch.reportedTargets, ...batch.items]);
-          return {
-            count: allTargets.size,
-            targets: Array.from(allTargets.values()),
-          };
-        }
-      }
+  getPageSummary(
+    pageDomain?: string,
+    tabId?: number,
+  ): { count: number; targets: DetectedTarget[]; savedToYapd: boolean } {
+    if (tabId && this.sessions.has(tabId)) {
+      const session = this.sessions.get(tabId)!;
+      return {
+        count: session.targets.size,
+        targets: Array.from(session.targets.values()).sort((a, b) => b.score - a.score),
+        savedToYapd: session.savedToYapd,
+      };
     }
 
     if (pageDomain) {
-      const normalizedDomain = pageDomain.toLowerCase();
-      const mainDomain = extractMainDomain(normalizedDomain);
-
-      for (const [key, batch] of this.batches.entries()) {
-        if (
-          key === mainDomain ||
-          key === normalizedDomain ||
-          extractMainDomain(batch.page.domain) === mainDomain ||
-          batch.page.domain.toLowerCase() === normalizedDomain
-        ) {
-          const allTargets = new Map([...batch.reportedTargets, ...batch.items]);
-          return {
-            count: allTargets.size,
-            targets: Array.from(allTargets.values()),
-          };
-        }
+      const mainDomain = extractMainDomain(pageDomain.toLowerCase());
+      const session = this.domainFallbackMap.get(mainDomain);
+      if (session) {
+        return {
+          count: session.targets.size,
+          targets: Array.from(session.targets.values()).sort((a, b) => b.score - a.score),
+          savedToYapd: session.savedToYapd,
+        };
       }
     }
 
-    return { count: 0, targets: [] };
+    return { count: 0, targets: [], savedToYapd: false };
   }
 }
 

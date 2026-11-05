@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>YAPS Sentinel</title>
+  <title>YAPD Sentinel</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
@@ -12,7 +12,7 @@
       <svg class="logo-icon" viewBox="0 0 24 24">
         <path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5zm0 18c-3.75-1-6.5-4.85-6.9-9.1.75-.4 3.75-1.9 6.9-1.9s6.15 1.5 6.9 1.9c-.4 4.25-3.15 8.1-6.9 9.1z"/>
       </svg>
-      <span class="title">YAPS Sentinel</span>
+      <span class="title">YAPD Sentinel</span>
     </div>
     <span id="connection-badge" class="badge disconnected">Desconectado</span>
   </header>
@@ -25,48 +25,93 @@
     </div>
     <div class="field">
       <label for="pairing-code">Código de Pareamento</label>
-      <input type="text" id="pairing-code" placeholder="Ex: A1B2C3" maxlength="10" style="text-transform: uppercase; font-family: monospace; letter-spacing: 2px;">
+      <input type="text" id="pairing-code" placeholder="Ex: 123456" maxlength="10" style="text-transform: uppercase; font-family: monospace; letter-spacing: 2px;">
     </div>
     <button id="btn-pair" class="btn btn-primary">Conectar ao YAPD</button>
-    <p class="helper-text">Gere o código no menu <strong>Browser Extension</strong> do painel YAPD.</p>
+    <p class="helper-text">Gere o código no menu <strong>YAPD Inspector</strong> do painel central.</p>
   </section>
 
-  <!-- Painel Ativo (quando pareado) -->
-  <section id="active-section" class="card" style="display: none;">
-    <div class="stats-grid">
-      <div class="stat-box">
-        <span class="stat-label">Domínio Atual</span>
-        <div id="stat-current-domain" class="stat-value">-</div>
+  <!-- Painel Ativo (quando conectado) -->
+  <main id="active-section" style="display: none;">
+    <!-- Navegação por Abas -->
+    <div class="tabs-nav">
+      <button id="tab-btn-sentinel" class="tab-btn active">Sentinela</button>
+      <button id="tab-btn-settings" class="tab-btn">Configurações</button>
+    </div>
+
+    <!-- Conteúdo da Aba 1: Sentinela -->
+    <div id="tab-content-sentinel" class="tab-content">
+      <div class="stats-grid">
+        <div class="stat-box">
+          <span class="stat-label">Domínio Atual</span>
+          <div id="stat-current-domain" class="stat-value">-</div>
+        </div>
+        <div class="stat-box">
+          <span class="stat-label">Detectados na Aba</span>
+          <div id="stat-detected-count" class="stat-value" style="color: #ef4444;">0</div>
+        </div>
       </div>
-      <div class="stat-box">
-        <span class="stat-label">Detectados na Aba</span>
-        <div id="stat-detected-count" class="stat-value" style="color: #ef4444;">0</div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px;">
+        <button id="btn-start-picker" class="btn btn-primary">
+          🎯 Inspecionar Elemento (Clique)
+        </button>
+        <button id="btn-save-analysis" class="btn btn-success">
+          📤 Salvar Análise no YAPD
+        </button>
+        <button id="btn-open-yapd" class="btn btn-outline">
+          🌐 Abrir Painel YAPD
+        </button>
+      </div>
+
+      <!-- Mini-lista de alvos detectados com bloqueio direto -->
+      <div class="targets-section">
+        <div class="targets-header">
+          <span>Alvos Detectados (Score &ge; <span id="label-score-threshold">30</span>)</span>
+        </div>
+        <div id="targets-list" class="targets-list">
+          <p class="empty-targets">Nenhum alvo de anúncio detectado até o momento.</p>
+        </div>
       </div>
     </div>
 
-    <div style="display: flex; flex-direction: column; gap: 8px;">
-      <button id="btn-start-picker" class="btn btn-primary">
-        🎯 Inspecionar Elemento (Clique)
-      </button>
-      <button id="btn-open-yapd" class="btn btn-outline">
-        🌐 Abrir Painel YAPD
-      </button>
-    </div>
+    <!-- Conteúdo da Aba 2: Configurações -->
+    <div id="tab-content-settings" class="tab-content" style="display: none;">
+      <div class="card">
+        <div class="field">
+          <label for="cfg-yapd-url">URL do YAPD</label>
+          <input type="url" id="cfg-yapd-url" placeholder="http://localhost:3000">
+        </div>
 
-    <div class="toggle-row">
-      <span style="font-size: 12px;">Auditoria Automática</span>
-      <input type="checkbox" id="toggle-active-inspection" checked style="cursor: pointer;">
-    </div>
+        <div class="field">
+          <label for="cfg-token">Token de Pareamento</label>
+          <input type="text" id="cfg-token" placeholder="Token Bearer da extensão" style="font-family: monospace; font-size: 11px;">
+          <p class="helper-text" style="color: #f87171; margin-top: 4px;">
+            ⚠️ Se apagar e deixar o campo vazio, remove a integração com o YAPD.
+          </p>
+        </div>
 
-    <div style="display: flex; gap: 8px; margin-top: 12px;">
-      <button id="btn-reconnect" class="btn btn-outline" style="font-size: 11px;">
-        🔄 Alterar / Re-parear
-      </button>
-      <button id="btn-disconnect" class="btn btn-destructive" style="font-size: 11px;">
-        Desconectar
-      </button>
+        <div class="field">
+          <label for="cfg-min-score">Limiar Mínimo de Score para Ads (Padrão 30)</label>
+          <input type="number" id="cfg-min-score" min="10" max="100" value="30">
+        </div>
+
+        <div class="toggle-row" style="margin-top: 10px; margin-bottom: 12px;">
+          <span style="font-size: 12px;">Salvar no YAPD Automaticamente</span>
+          <input type="checkbox" id="cfg-auto-send" style="cursor: pointer;">
+        </div>
+
+        <div style="display: flex; gap: 8px;">
+          <button id="btn-save-config" class="btn btn-primary" style="flex: 1;">
+            Salvar
+          </button>
+          <button id="btn-disconnect" class="btn btn-destructive">
+            Desconectar
+          </button>
+        </div>
+      </div>
     </div>
-  </section>
+  </main>
 
   <script type="module" src="popup.ts"></script>
 </body>

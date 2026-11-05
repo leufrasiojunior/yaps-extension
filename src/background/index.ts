@@ -5,7 +5,7 @@ import { batchQueue } from "./batch-queue";
 import { initRequestListener } from "./request-listener";
 import { extensionStorage } from "./storage";
 
-console.log("[YAPS] Sentinel Background Service Worker iniciado.");
+console.log("[YAPD Sentinel] Service Worker iniciado.");
 
 initRequestListener();
 
@@ -50,13 +50,13 @@ function resolveCanonicalPage(
 
 if (typeof chrome !== "undefined" && chrome.runtime) {
   chrome.runtime.onInstalled.addListener(() => {
-    console.log("[YAPS] Extensão instalada/atualizada.");
-    chrome.alarms.create("yaps_sync_config", { periodInMinutes: 30 });
+    console.log("[YAPD Sentinel] Extensão instalada/atualizada.");
+    chrome.alarms.create("yapd_sentinel_sync_config", { periodInMinutes: 30 });
     yapdApiClient.fetchConfig().catch(console.error);
   });
 
   chrome.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name === "yaps_sync_config") {
+    if (alarm.name === "yapd_sentinel_sync_config") {
       yapdApiClient.fetchConfig().catch(console.error);
     }
   });
@@ -76,7 +76,6 @@ if (typeof chrome !== "undefined" && chrome.runtime) {
         }
 
         resolveCanonicalPage(sender, message.page, (canonicalPage) => {
-          // Se a detecção ocorreu dentro de um subframe/iframe, registra o frame de origem na evidência
           if (sender.frameId && sender.frameId !== 0) {
             message.candidate.evidence = {
               ...message.candidate.evidence,
@@ -100,6 +99,49 @@ if (typeof chrome !== "undefined" && chrome.runtime) {
 
       const summary = batchQueue.getPageSummary(effectivePageDomain, effectiveTabId);
       sendResponse(summary);
+      return true;
+    }
+
+    if (message.type === "SAVE_PAGE_ANALYSIS_TO_YAPD") {
+      const targetTabId = message.tabId || tabId;
+      if (!targetTabId) {
+        sendResponse({ success: false, message: "Aba não identificada." });
+        return true;
+      }
+
+      batchQueue.flushSession(targetTabId).then((result) => {
+        sendResponse(result);
+      });
+      return true;
+    }
+
+    if (message.type === "QUICK_BLOCK_TARGET") {
+      const targetTabId = message.tabId || tabId;
+      extensionStorage.getState().then(async (state) => {
+        if (!state.paired) {
+          sendResponse({ success: false, message: "Extensão desconectada." });
+          return;
+        }
+
+        const summary = batchQueue.getPageSummary(undefined, targetTabId);
+        const matchingItem = summary.targets.find(
+          (t) => t.target.toLowerCase() === message.target.toLowerCase(),
+        );
+
+        const pageContext: PageContext = {
+          url: sender.tab?.url || "https://unknown.local",
+          domain: sender.tab?.url ? extractHostname(sender.tab.url) || "unknown" : "unknown",
+        };
+
+        const result = await yapdApiClient.applyBlockTarget(
+          message.target,
+          pageContext,
+          matchingItem,
+          message.kind || "exact",
+        );
+
+        sendResponse(result);
+      });
       return true;
     }
 

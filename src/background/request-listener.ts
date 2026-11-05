@@ -1,4 +1,4 @@
-import { evaluateCandidate, extractHostname } from "../shared/domain-utils";
+import { evaluateCandidate, extractHostname, matchesAnyPattern } from "../shared/domain-utils";
 import { batchQueue } from "./batch-queue";
 import { extensionStorage } from "./storage";
 
@@ -21,6 +21,14 @@ export function initRequestListener(): void {
 
         chrome.tabs.get(details.tabId, (tab) => {
           if (chrome.runtime.lastError || !tab || !tab.url) {
+            return;
+          }
+
+          // Salvaguarda: se a aba estiver em uma URL sensível ou bloqueada, ignora
+          if (
+            matchesAnyPattern(tab.url, state.settings.sensitiveUrlPatterns) ||
+            matchesAnyPattern(tab.url, state.settings.hardBlockedUrlPatterns)
+          ) {
             return;
           }
 

@@ -1,5 +1,6 @@
 import { yapdApiClient } from "../background/api-client";
 import { extensionStorage } from "../background/storage";
+import type { DetectedTarget } from "../shared/types";
 
 const connectionBadge = document.getElementById("connection-badge") as HTMLElement;
 const pairingSection = document.getElementById("pairing-section") as HTMLElement;
@@ -9,16 +10,47 @@ const yapdUrlInput = document.getElementById("yapd-url") as HTMLInputElement;
 const pairingCodeInput = document.getElementById("pairing-code") as HTMLInputElement;
 const btnPair = document.getElementById("btn-pair") as HTMLButtonElement;
 
+// Abas
+const tabBtnSentinel = document.getElementById("tab-btn-sentinel") as HTMLButtonElement;
+const tabBtnSettings = document.getElementById("tab-btn-settings") as HTMLButtonElement;
+const tabContentSentinel = document.getElementById("tab-content-sentinel") as HTMLElement;
+const tabContentSettings = document.getElementById("tab-content-settings") as HTMLElement;
+
+// Elementos da Aba Sentinela
 const statCurrentDomain = document.getElementById("stat-current-domain") as HTMLElement;
 const statDetectedCount = document.getElementById("stat-detected-count") as HTMLElement;
-
 const btnStartPicker = document.getElementById("btn-start-picker") as HTMLButtonElement;
+const btnSaveAnalysis = document.getElementById("btn-save-analysis") as HTMLButtonElement;
 const btnOpenYapd = document.getElementById("btn-open-yapd") as HTMLButtonElement;
-const toggleActiveInspection = document.getElementById(
-  "toggle-active-inspection",
-) as HTMLInputElement;
-const btnReconnect = document.getElementById("btn-reconnect") as HTMLButtonElement;
+const labelScoreThreshold = document.getElementById("label-score-threshold") as HTMLElement;
+const targetsListContainer = document.getElementById("targets-list") as HTMLElement;
+
+// Elementos da Aba Configurações
+const cfgYapdUrl = document.getElementById("cfg-yapd-url") as HTMLInputElement;
+const cfgToken = document.getElementById("cfg-token") as HTMLInputElement;
+const cfgMinScore = document.getElementById("cfg-min-score") as HTMLInputElement;
+const cfgAutoSend = document.getElementById("cfg-auto-send") as HTMLInputElement;
+const btnSaveConfig = document.getElementById("btn-save-config") as HTMLButtonElement;
 const btnDisconnect = document.getElementById("btn-disconnect") as HTMLButtonElement;
+
+let currentActiveTabId: number | undefined;
+
+function switchTab(tab: "sentinel" | "settings"): void {
+  if (tab === "sentinel") {
+    tabBtnSentinel.classList.add("active");
+    tabBtnSettings.classList.remove("active");
+    tabContentSentinel.style.display = "block";
+    tabContentSettings.style.display = "none";
+  } else {
+    tabBtnSettings.classList.add("active");
+    tabBtnSentinel.classList.remove("active");
+    tabContentSettings.style.display = "block";
+    tabContentSentinel.style.display = "none";
+  }
+}
+
+tabBtnSentinel?.addEventListener("click", () => switchTab("sentinel"));
+tabBtnSettings?.addEventListener("click", () => switchTab("settings"));
 
 async function render(): Promise<void> {
   const state = await extensionStorage.getState();
@@ -28,23 +60,25 @@ async function render(): Promise<void> {
     connectionBadge.className = "badge connected";
     pairingSection.style.display = "none";
     activeSection.style.display = "block";
-    toggleActiveInspection.checked = state.activeInspectionEnabled;
 
-    // Valida se o token de pareamento ainda é aceito pelo backend
-    yapdApiClient.fetchConfig().then(async (config) => {
-      if (!config) {
-        const freshState = await extensionStorage.getState();
-        if (!freshState.paired) {
-          await render();
-        }
-      }
-    });
+    const threshold = state.settings.minScoreThreshold ?? 30;
+    if (labelScoreThreshold) {
+      labelScoreThreshold.textContent = String(threshold);
+    }
 
-    // Obtem dados da aba ativa
+    // Preenche campos de configurações
+    cfgYapdUrl.value = state.yapdBaseUrl || "http://localhost:3000";
+    cfgToken.value = state.token;
+    cfgMinScore.value = String(threshold);
+    cfgAutoSend.checked = Boolean(state.settings.autoSendToYapd);
+
+    // Obtém dados da aba ativa
     if (typeof chrome !== "undefined" && chrome.tabs) {
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         const tab = tabs[0];
+        currentActiveTabId = tab?.id;
         let pageDomain = "";
+
         if (tab?.url) {
           try {
             const parsed = new URL(tab.url);
@@ -55,13 +89,24 @@ async function render(): Promise<void> {
           }
         }
 
-        // Pede resumo de deteccoes para o background informando o dominio e tabId da aba ativa
+        // Pede resumo de detecções para o background informando a aba ativa
         chrome.runtime.sendMessage(
-          { type: "GET_PAGE_SUMMARY", pageDomain, tabId: tab?.id },
+          { type: "GET_PAGE_SUMMARY", pageDomain, tabId: currentActiveTabId },
           (summary) => {
-            if (summary?.count !== undefined) {
-              statDetectedCount.textContent = String(summary.count);
+            const count = summary?.count ?? 0;
+            statDetectedCount.textContent = String(count);
+
+            if (summary?.savedToYapd) {
+              btnSaveAnalysis.textContent = "✓ Análise Salva no YAPD";
+              btnSaveAnalysis.classList.remove("btn-success");
+              btnSaveAnalysis.classList.add("btn-outline");
+            } else {
+              btnSaveAnalysis.textContent = "📤 Salvar Análise no YAPD";
+              btnSaveAnalysis.classList.remove("btn-outline");
+              btnSaveAnalysis.classList.add("btn-success");
             }
+
+            renderTargetsList(summary?.targets || [], threshold);
           },
         );
       });
@@ -72,6 +117,73 @@ async function render(): Promise<void> {
     pairingSection.style.display = "block";
     activeSection.style.display = "none";
     yapdUrlInput.value = state.yapdBaseUrl || "http://localhost:3000";
+  }
+}
+
+function renderTargetsList(targets: DetectedTarget[], minScore: number): void {
+  if (!targetsListContainer) return;
+
+  const filtered = targets.filter((t) => t.score >= minScore);
+
+  if (filtered.length === 0) {
+    targetsListContainer.innerHTML =
+      '<p class="empty-targets">Nenhum alvo de anúncio detectado nesta aba.</p>';
+    return;
+  }
+
+  targetsListContainer.innerHTML = "";
+
+  for (const item of filtered) {
+    const row = document.createElement("div");
+    row.className = "target-row";
+
+    const info = document.createElement("div");
+    info.className = "target-info";
+
+    const domain = document.createElement("span");
+    domain.className = "target-domain";
+    domain.textContent = item.target;
+
+    const meta = document.createElement("div");
+    meta.className = "target-meta";
+    meta.innerHTML = `
+      <span style="color: ${item.score >= 70 ? "#ef4444" : "#f59e0b"}; font-weight: 600;">${item.score} pts</span>
+      <span style="color: #a1a1aa;">${item.category}</span>
+    `;
+
+    info.appendChild(domain);
+    info.appendChild(meta);
+
+    const btnBlock = document.createElement("button");
+    btnBlock.className = "btn-quick-block";
+    btnBlock.textContent = "Bloquear";
+
+    btnBlock.addEventListener("click", () => {
+      btnBlock.disabled = true;
+      btnBlock.textContent = "Bloqueando...";
+
+      chrome.runtime.sendMessage(
+        {
+          type: "QUICK_BLOCK_TARGET",
+          target: item.target,
+          tabId: currentActiveTabId,
+        },
+        (res) => {
+          if (res?.success) {
+            btnBlock.textContent = "Bloqueado";
+            btnBlock.classList.add("blocked");
+          } else {
+            btnBlock.disabled = false;
+            btnBlock.textContent = "Erro";
+            alert(`Falha ao bloquear: ${res?.message || "erro de rede"}`);
+          }
+        },
+      );
+    });
+
+    row.appendChild(info);
+    row.appendChild(btnBlock);
+    targetsListContainer.appendChild(row);
   }
 }
 
@@ -104,11 +216,33 @@ btnStartPicker?.addEventListener("click", () => {
       const tabId = tabs[0]?.id;
       if (tabId) {
         chrome.tabs.sendMessage(tabId, { type: "START_ELEMENT_PICKER" }, () => {
-          window.close(); // Fecha popup para o usuario interagir com a pagina
+          window.close(); // Fecha popup para o usuário interagir com o site
         });
       }
     });
   }
+});
+
+btnSaveAnalysis?.addEventListener("click", () => {
+  if (!currentActiveTabId) return;
+
+  btnSaveAnalysis.disabled = true;
+  btnSaveAnalysis.textContent = "Salvando...";
+
+  chrome.runtime.sendMessage(
+    { type: "SAVE_PAGE_ANALYSIS_TO_YAPD", tabId: currentActiveTabId },
+    (res) => {
+      btnSaveAnalysis.disabled = false;
+      if (res?.success) {
+        btnSaveAnalysis.textContent = "✓ Análise Salva no YAPD";
+        btnSaveAnalysis.classList.remove("btn-success");
+        btnSaveAnalysis.classList.add("btn-outline");
+      } else {
+        btnSaveAnalysis.textContent = "📤 Salvar Análise no YAPD";
+        alert("Não há dados pendentes ou falha ao salvar no YAPD.");
+      }
+    },
+  );
 });
 
 btnOpenYapd?.addEventListener("click", async () => {
@@ -122,14 +256,36 @@ btnOpenYapd?.addEventListener("click", async () => {
   }
 });
 
-toggleActiveInspection?.addEventListener("change", async () => {
-  await extensionStorage.setState({ activeInspectionEnabled: toggleActiveInspection.checked });
-});
+btnSaveConfig?.addEventListener("click", async () => {
+  const token = cfgToken.value.trim();
+  const baseUrl = cfgYapdUrl.value.trim().replace(/\/+$/, "").replace(/\/api$/, "");
+  const minScore = Number.parseInt(cfgMinScore.value, 10) || 30;
+  const autoSend = cfgAutoSend.checked;
 
-btnReconnect?.addEventListener("click", async () => {
-  await extensionStorage.disconnect();
+  // Se o token for apagado e deixado vazio, remove a integração!
+  if (!token) {
+    if (confirm("O token está vazio. Deseja remover a integração com o YAPD?")) {
+      await extensionStorage.disconnect();
+      await render();
+    }
+    return;
+  }
+
+  const state = await extensionStorage.getState();
+  await extensionStorage.setState({
+    yapdBaseUrl: baseUrl || state.yapdBaseUrl,
+    token,
+    paired: true,
+    settings: {
+      ...state.settings,
+      minScoreThreshold: minScore,
+      autoSendToYapd: autoSend,
+    },
+  });
+
+  alert("Configurações salvas com sucesso!");
+  switchTab("sentinel");
   await render();
-  pairingCodeInput?.focus();
 });
 
 btnDisconnect?.addEventListener("click", async () => {
@@ -139,5 +295,5 @@ btnDisconnect?.addEventListener("click", async () => {
   }
 });
 
-// Inicializacao
+// Inicialização
 render().catch(console.error);

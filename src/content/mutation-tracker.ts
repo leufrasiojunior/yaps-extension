@@ -1,4 +1,4 @@
-import { evaluateCandidate } from "../shared/domain-utils";
+import { calculateDomPathHash, evaluateCandidate } from "../shared/domain-utils";
 import type { PageContext } from "../shared/types";
 
 export class MutationTracker {
@@ -12,11 +12,15 @@ export class MutationTracker {
   }
 
   start(): void {
-    // 1. Escuta notificacoes do Main World Injector (hooks nativos)
+    // 1. Escuta notificações do Main World Injector
     window.addEventListener("message", this.handleWindowMessage);
 
-    // 2. Observa insercoes de nós e atributos na arvore DOM
+    // 2. Observa inserções de nós e atributos na árvore DOM
     this.observer = new MutationObserver((mutations) => {
+      if (this.isSensitivePage()) {
+        return;
+      }
+
       for (const mutation of mutations) {
         if (mutation.type === "childList") {
           for (const node of mutation.addedNodes) {
@@ -37,7 +41,6 @@ export class MutationTracker {
         attributes: true,
         attributeFilter: ["src", "data-src"],
       });
-      // Inspeciona nos que ja existiam ao carregar
       this.inspectInitialDom();
     } else {
       document.addEventListener("DOMContentLoaded", () => {
@@ -60,8 +63,26 @@ export class MutationTracker {
     window.removeEventListener("message", this.handleWindowMessage);
   }
 
+  private isSensitivePage(): boolean {
+    if (document.querySelector('input[type="password"]')) {
+      return true;
+    }
+    const lower = window.location.href.toLowerCase();
+    return (
+      lower.includes("login") ||
+      lower.includes("signin") ||
+      lower.includes("auth") ||
+      lower.includes("bank") ||
+      lower.includes("checkout")
+    );
+  }
+
   private inspectInitialDom(): void {
-    const scriptsAndFrames = document.querySelectorAll("script[src], iframe[src], ins.adsbygoogle");
+    if (this.isSensitivePage()) return;
+
+    const scriptsAndFrames = document.querySelectorAll(
+      "script[src], iframe[src], ins.adsbygoogle, div.publicidade, div.patrocinado",
+    );
     for (const el of scriptsAndFrames) {
       if (el instanceof HTMLElement) {
         this.inspectNode(el);
@@ -70,6 +91,8 @@ export class MutationTracker {
   }
 
   private inspectNode(el: HTMLElement): void {
+    if (this.isSensitivePage()) return;
+
     const tag = el.tagName.toLowerCase();
     const src =
       el.getAttribute("src") ||
@@ -77,6 +100,8 @@ export class MutationTracker {
       (el as unknown as HTMLScriptElement).src;
     const origin = el.dataset?.yapsOrigin || el.getAttribute("data-yaps-origin");
     const classOrId = `${el.className || ""} ${el.id || ""}`;
+    const domPathHash = calculateDomPathHash(el);
+
     let width = 0;
     let height = 0;
     try {
@@ -95,6 +120,9 @@ export class MutationTracker {
         classOrId,
         width,
         height,
+        domPathHash,
+        elementId: el.id || undefined,
+        elementClasses: [...el.classList],
       });
 
       if (candidate) {
@@ -102,7 +130,7 @@ export class MutationTracker {
       }
     }
 
-    // Procura tags filhas criadas juntas
+    // Procura tags filhas
     const childScripts = el.querySelectorAll("script[src], iframe[src]");
     for (const child of childScripts) {
       if (child instanceof HTMLElement) {
@@ -116,6 +144,7 @@ export class MutationTracker {
             {
               elementTag: child.tagName.toLowerCase(),
               initiatorScript: origin || undefined,
+              domPathHash: calculateDomPathHash(child),
             },
           );
           if (candidate) {
@@ -127,6 +156,7 @@ export class MutationTracker {
   }
 
   private handleWindowMessage(event: MessageEvent): void {
+    if (this.isSensitivePage()) return;
     if (event.source !== window || !event.data || event.data.source !== "YAPS_MAIN_INJECTOR") {
       return;
     }
@@ -146,7 +176,7 @@ export class MutationTracker {
   }
 
   private sendCandidate(candidate: ReturnType<typeof evaluateCandidate>): void {
-    if (!candidate) return;
+    if (!candidate || this.isSensitivePage()) return;
     if (typeof chrome !== "undefined" && chrome.runtime) {
       chrome.runtime.sendMessage({
         type: "CANDIDATE_DETECTED",

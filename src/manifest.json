@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "YAPS - YAPD Ad & Domain Sentinel",
-  "version": "0.1.0",
+  "name": "YAPD Sentinel - Ad & Domain Inspector",
+  "version": "0.2.0",
   "description": "Sentinela de anúncios e domínios integrada ao YAPD e Pi-hole v6+.",
   "permissions": ["storage", "activeTab", "tabs", "alarms", "webRequest"],
   "host_permissions": ["<all_urls>"],
@@ -11,7 +11,7 @@
   },
   "action": {
     "default_popup": "popup/index.html",
-    "default_title": "YAPS Sentinel",
+    "default_title": "YAPD Sentinel",
     "default_icon": {
       "16": "icons/icon-16.png",
       "48": "icons/icon-48.png",
