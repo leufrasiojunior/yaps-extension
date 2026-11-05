@@ -63,14 +63,18 @@ export type ExtensionStorageState = {
   activeInspectionEnabled: boolean;
 };
 
+export type RuleCacheItem = {
+  target: string;
+  kind: "exact" | "regex";
+  source: "browser_extension_decision" | "managed_domain";
+};
+
 export type PairingResponse = {
-  id: string;
-  name: string;
-  browser: string;
-  token: string;
-  manifestVersion: number;
-  extensionVersion: string;
+  accessToken: string;
+  extensionId: string;
   settings: ExtensionSettings;
+  allowlist: RuleCacheItem[];
+  blockedItems: RuleCacheItem[];
 };
 
 export type RuntimeMessage =

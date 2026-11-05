@@ -22,13 +22,11 @@ export class YapdApiClient {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        pairingCode: pairingCode.trim().toUpperCase(),
-        device: {
-          name: deviceName,
-          browser: "Chrome",
-          manifestVersion: 3,
-          extensionVersion: "0.1.0",
-        },
+        pairingCode: pairingCode.trim(),
+        extensionName: deviceName,
+        browser: "Chrome",
+        manifestVersion: 3,
+        extensionVersion: "0.1.0",
       }),
     });
 
@@ -40,7 +38,7 @@ export class YapdApiClient {
     const data = (await response.json()) as PairingResponse;
     const cleanBaseUrl = yapdBaseUrl.trim().replace(/\/+$/, "").replace(/\/api$/, "");
     await extensionStorage.setState({ yapdBaseUrl: cleanBaseUrl });
-    await extensionStorage.setPaired(data.token, data.id, data.settings);
+    await extensionStorage.setPaired(data.accessToken, data.extensionId, data.settings);
     return data;
   }
 
