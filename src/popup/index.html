@@ -58,9 +58,14 @@
       <input type="checkbox" id="toggle-active-inspection" checked style="cursor: pointer;">
     </div>
 
-    <button id="btn-disconnect" class="btn btn-destructive" style="margin-top: 12px; font-size: 11px;">
-      Desconectar Extensão
-    </button>
+    <div style="display: flex; gap: 8px; margin-top: 12px;">
+      <button id="btn-reconnect" class="btn btn-outline" style="font-size: 11px;">
+        🔄 Alterar / Re-parear
+      </button>
+      <button id="btn-disconnect" class="btn btn-destructive" style="font-size: 11px;">
+        Desconectar
+      </button>
+    </div>
   </section>
 
   <script type="module" src="popup.ts"></script>

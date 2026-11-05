@@ -89,6 +89,12 @@ export class YapdApiClient {
       });
 
       if (!response.ok) {
+        if (response.status === 401 || response.status === 403) {
+          console.warn(
+            "[YAPS] Token de pareamento rejeitado pelo YAPD (banco resetado ou dispositivo revogado). Desconectando.",
+          );
+          await extensionStorage.disconnect();
+        }
         return null;
       }
 

@@ -17,6 +17,7 @@ const btnOpenYapd = document.getElementById("btn-open-yapd") as HTMLButtonElemen
 const toggleActiveInspection = document.getElementById(
   "toggle-active-inspection",
 ) as HTMLInputElement;
+const btnReconnect = document.getElementById("btn-reconnect") as HTMLButtonElement;
 const btnDisconnect = document.getElementById("btn-disconnect") as HTMLButtonElement;
 
 async function render(): Promise<void> {
@@ -28,6 +29,16 @@ async function render(): Promise<void> {
     pairingSection.style.display = "none";
     activeSection.style.display = "block";
     toggleActiveInspection.checked = state.activeInspectionEnabled;
+
+    // Valida se o token de pareamento ainda é aceito pelo backend
+    yapdApiClient.fetchConfig().then(async (config) => {
+      if (!config) {
+        const freshState = await extensionStorage.getState();
+        if (!freshState.paired) {
+          await render();
+        }
+      }
+    });
 
     // Obtem dados da aba ativa
     if (typeof chrome !== "undefined" && chrome.tabs) {
@@ -110,6 +121,12 @@ btnOpenYapd?.addEventListener("click", async () => {
 
 toggleActiveInspection?.addEventListener("change", async () => {
   await extensionStorage.setState({ activeInspectionEnabled: toggleActiveInspection.checked });
+});
+
+btnReconnect?.addEventListener("click", async () => {
+  await extensionStorage.disconnect();
+  await render();
+  pairingCodeInput?.focus();
 });
 
 btnDisconnect?.addEventListener("click", async () => {
