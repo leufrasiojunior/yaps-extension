@@ -1,4 +1,5 @@
 import { BATCH_DEBOUNCE_MS, MAX_BATCH_SIZE } from "../shared/constants";
+import { extractMainDomain } from "../shared/domain-utils";
 import type {
   DetectedTarget,
   ExtensionMetadata,
@@ -20,7 +21,7 @@ export class BatchQueueManager {
   private batches = new Map<string, PageBatchState>();
 
   private getBatchKey(page: PageContext): string {
-    return page.domain.toLowerCase();
+    return extractMainDomain(page.domain);
   }
 
   enqueue(page: PageContext, target: DetectedTarget, tabId?: number, immediate = false): void {
@@ -36,6 +37,11 @@ export class BatchQueueManager {
         tabId,
       };
       this.batches.set(key, batch);
+    } else {
+      // Atualiza o contexto se a nova pagina tiver título ou url mais canônica
+      if (page.title && !batch.page.title) {
+        batch.page.title = page.title;
+      }
     }
 
     if (tabId) {
@@ -135,16 +141,40 @@ export class BatchQueueManager {
     }
   }
 
-  getPageSummary(pageDomain: string): { count: number; targets: DetectedTarget[] } {
-    const batch = this.batches.get(pageDomain.toLowerCase());
-    if (!batch) {
-      return { count: 0, targets: [] };
+  getPageSummary(pageDomain?: string, tabId?: number): { count: number; targets: DetectedTarget[] } {
+    if (tabId) {
+      for (const batch of this.batches.values()) {
+        if (batch.tabId === tabId) {
+          const allTargets = new Map([...batch.reportedTargets, ...batch.items]);
+          return {
+            count: allTargets.size,
+            targets: Array.from(allTargets.values()),
+          };
+        }
+      }
     }
-    const allTargets = new Map([...batch.reportedTargets, ...batch.items]);
-    return {
-      count: allTargets.size,
-      targets: Array.from(allTargets.values()),
-    };
+
+    if (pageDomain) {
+      const normalizedDomain = pageDomain.toLowerCase();
+      const mainDomain = extractMainDomain(normalizedDomain);
+
+      for (const [key, batch] of this.batches.entries()) {
+        if (
+          key === mainDomain ||
+          key === normalizedDomain ||
+          extractMainDomain(batch.page.domain) === mainDomain ||
+          batch.page.domain.toLowerCase() === normalizedDomain
+        ) {
+          const allTargets = new Map([...batch.reportedTargets, ...batch.items]);
+          return {
+            count: allTargets.size,
+            targets: Array.from(allTargets.values()),
+          };
+        }
+      }
+    }
+
+    return { count: 0, targets: [] };
   }
 }
 

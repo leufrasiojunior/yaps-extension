@@ -9,6 +9,7 @@ export type DetectionEvidence = {
     | "web_request";
   resourceType?: string;
   isThirdParty: boolean;
+  frameUrl?: string;
   elementTag?: string;
   initiatorScript?: string;
   timestamp?: number;

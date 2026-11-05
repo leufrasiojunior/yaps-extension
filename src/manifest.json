@@ -3,7 +3,7 @@
   "name": "YAPS - YAPD Ad & Domain Sentinel",
   "version": "0.1.0",
   "description": "Sentinela de anúncios e domínios integrada ao YAPD e Pi-hole v6+.",
-  "permissions": ["storage", "activeTab", "alarms", "webRequest"],
+  "permissions": ["storage", "activeTab", "tabs", "alarms", "webRequest"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js",

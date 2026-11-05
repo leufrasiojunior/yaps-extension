@@ -3,6 +3,8 @@ import { ElementPicker } from "./element-picker";
 import { MutationTracker } from "./mutation-tracker";
 
 (() => {
+  const isTopFrame = window === window.top;
+
   const pageContext: PageContext = {
     url: window.location.href,
     domain: window.location.hostname,
@@ -12,17 +14,18 @@ import { MutationTracker } from "./mutation-tracker";
   const tracker = new MutationTracker(pageContext);
   tracker.start();
 
-  const picker = new ElementPicker(pageContext);
+  // O Element Picker deve operar apenas no top frame para cobrir a viewport inteira sem conflitos
+  const picker = isTopFrame ? new ElementPicker(pageContext) : null;
 
-  if (typeof chrome !== "undefined" && chrome.runtime) {
+  if (typeof chrome !== "undefined" && chrome.runtime && isTopFrame) {
     chrome.runtime.onMessage.addListener((message: RuntimeMessage, _sender, sendResponse) => {
       if (message.type === "START_ELEMENT_PICKER") {
-        picker.start();
+        picker?.start();
         sendResponse({ status: "picker_started" });
         return true;
       }
       if (message.type === "STOP_ELEMENT_PICKER") {
-        picker.stop();
+        picker?.stop();
         sendResponse({ status: "picker_stopped" });
         return true;
       }
@@ -30,5 +33,5 @@ import { MutationTracker } from "./mutation-tracker";
     });
   }
 
-  console.debug("[YAPS] Isolated Content Script carregado em", pageContext.domain);
+  console.debug("[YAPS] Isolated Content Script ativo em", pageContext.domain, isTopFrame ? "(top)" : "(frame)");
 })();

@@ -55,12 +55,15 @@ async function render(): Promise<void> {
           }
         }
 
-        // Pede resumo de deteccoes para o background informando o dominio da aba ativa
-        chrome.runtime.sendMessage({ type: "GET_PAGE_SUMMARY", pageDomain }, (summary) => {
-          if (summary?.count !== undefined) {
-            statDetectedCount.textContent = String(summary.count);
-          }
-        });
+        // Pede resumo de deteccoes para o background informando o dominio e tabId da aba ativa
+        chrome.runtime.sendMessage(
+          { type: "GET_PAGE_SUMMARY", pageDomain, tabId: tab?.id },
+          (summary) => {
+            if (summary?.count !== undefined) {
+              statDetectedCount.textContent = String(summary.count);
+            }
+          },
+        );
       });
     }
   } else {
