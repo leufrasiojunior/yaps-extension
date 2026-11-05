@@ -2,8 +2,11 @@ import type { ExtensionSettings, PairingResponse, ReportExtensionPayload } from 
 import { extensionStorage } from "./storage";
 
 export class YapdApiClient {
-  private normalizeUrl(baseUrl: string): string {
-    return baseUrl.trim().replace(/\/+$/, "");
+  private getApiEndpoint(baseUrl: string, relativePath: string): string {
+    const trimmed = baseUrl.trim().replace(/\/+$/, "");
+    const baseWithApi = trimmed.endsWith("/api") ? trimmed : `${trimmed}/api`;
+    const cleanPath = relativePath.replace(/^\/+/, "");
+    return `${baseWithApi}/${cleanPath}`;
   }
 
   async pair(
@@ -11,8 +14,7 @@ export class YapdApiClient {
     pairingCode: string,
     deviceName = "YAPS Chrome Sentinel",
   ): Promise<PairingResponse> {
-    const rootUrl = this.normalizeUrl(yapdBaseUrl);
-    const endpoint = `${rootUrl}/browser-extension/pair`;
+    const endpoint = this.getApiEndpoint(yapdBaseUrl, "browser-extension/pair");
 
     const response = await fetch(endpoint, {
       method: "POST",
@@ -36,7 +38,8 @@ export class YapdApiClient {
     }
 
     const data = (await response.json()) as PairingResponse;
-    await extensionStorage.setState({ yapdBaseUrl: rootUrl });
+    const cleanBaseUrl = yapdBaseUrl.trim().replace(/\/+$/, "").replace(/\/api$/, "");
+    await extensionStorage.setState({ yapdBaseUrl: cleanBaseUrl });
     await extensionStorage.setPaired(data.token, data.id, data.settings);
     return data;
   }
@@ -48,8 +51,7 @@ export class YapdApiClient {
       return null;
     }
 
-    const rootUrl = this.normalizeUrl(state.yapdBaseUrl);
-    const endpoint = `${rootUrl}/browser-extension/detections/report`;
+    const endpoint = this.getApiEndpoint(state.yapdBaseUrl, "browser-extension/detections/report");
 
     const response = await fetch(endpoint, {
       method: "POST",
@@ -79,8 +81,7 @@ export class YapdApiClient {
       return null;
     }
 
-    const rootUrl = this.normalizeUrl(state.yapdBaseUrl);
-    const endpoint = `${rootUrl}/browser-extension/config`;
+    const endpoint = this.getApiEndpoint(state.yapdBaseUrl, "browser-extension/config");
 
     try {
       const response = await fetch(endpoint, {

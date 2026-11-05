@@ -97,7 +97,8 @@ btnStartPicker?.addEventListener("click", () => {
 
 btnOpenYapd?.addEventListener("click", async () => {
   const state = await extensionStorage.getState();
-  const url = `${state.yapdBaseUrl.replace(/\/+$/, "")}/browser-extension`;
+  const rootUrl = state.yapdBaseUrl.trim().replace(/\/+$/, "").replace(/\/api$/, "");
+  const url = `${rootUrl}/browser-extension`;
   if (typeof chrome !== "undefined" && chrome.tabs) {
     chrome.tabs.create({ url });
   } else {
