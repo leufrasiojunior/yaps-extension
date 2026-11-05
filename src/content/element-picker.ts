@@ -11,6 +11,9 @@ export class ElementPicker {
   constructor(pageContext: PageContext) {
     this.pageContext = pageContext;
     this.onMouseMove = this.onMouseMove.bind(this);
+    this.onPointerDown = this.onPointerDown.bind(this);
+    this.onMouseDown = this.onMouseDown.bind(this);
+    this.onMouseUp = this.onMouseUp.bind(this);
     this.onClick = this.onClick.bind(this);
     this.onKeyDown = this.onKeyDown.bind(this);
   }
@@ -21,6 +24,9 @@ export class ElementPicker {
     this.createOverlay();
 
     document.addEventListener("mousemove", this.onMouseMove, true);
+    document.addEventListener("pointerdown", this.onPointerDown, true);
+    document.addEventListener("mousedown", this.onMouseDown, true);
+    document.addEventListener("mouseup", this.onMouseUp, true);
     document.addEventListener("click", this.onClick, true);
     document.addEventListener("keydown", this.onKeyDown, true);
   }
@@ -30,10 +36,34 @@ export class ElementPicker {
     this.active = false;
 
     document.removeEventListener("mousemove", this.onMouseMove, true);
+    document.removeEventListener("pointerdown", this.onPointerDown, true);
+    document.removeEventListener("mousedown", this.onMouseDown, true);
+    document.removeEventListener("mouseup", this.onMouseUp, true);
     document.removeEventListener("click", this.onClick, true);
     document.removeEventListener("keydown", this.onKeyDown, true);
 
     this.removeOverlay();
+  }
+
+  private onPointerDown(e: Event): void {
+    if (!this.active) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+  }
+
+  private onMouseDown(e: Event): void {
+    if (!this.active) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+  }
+
+  private onMouseUp(e: Event): void {
+    if (!this.active) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
   }
 
   private createOverlay(): void {
@@ -106,13 +136,16 @@ export class ElementPicker {
   }
 
   private onClick(e: MouseEvent): void {
-    if (!this.active || !this.currentElement) return;
+    if (!this.active) return;
 
     e.preventDefault();
     e.stopPropagation();
+    e.stopImmediatePropagation();
 
-    const element = this.currentElement;
+    const element = this.currentElement || (e.target as HTMLElement);
     this.stop();
+
+    if (!element) return;
 
     // Extrai evidências e URLs do elemento clicado
     const extractedUrls = this.extractUrlsFromElement(element);
@@ -180,30 +213,50 @@ export class ElementPicker {
       }
     };
 
+    // Checa propriedades nativas de vídeo e mídia
+    if (el instanceof HTMLVideoElement) {
+      if (el.currentSrc && el.currentSrc.startsWith("http")) {
+        urls.push(el.currentSrc);
+      }
+      if (el.src && el.src.startsWith("http")) {
+        urls.push(el.src);
+      }
+    }
+
     // Checa o proprio elemento
     checkAttr(el, "src");
     checkAttr(el, "href");
     checkAttr(el, "data-src");
+    checkAttr(el, "data-url");
+    checkAttr(el, "data-target");
     checkAttr(el, "data-ad-client");
     checkAttr(el, "data-yaps-origin");
 
-    // Procura em sub-elementos (links, imgs, iframes)
-    const children = el.querySelectorAll("a, img, iframe, script, source");
+    // Procura em sub-elementos (links, imgs, iframes, videos, sources)
+    const children = el.querySelectorAll("a, img, iframe, script, source, video, embed, object");
     for (const child of children) {
+      if (child instanceof HTMLVideoElement && child.currentSrc) {
+        urls.push(child.currentSrc);
+      }
       checkAttr(child, "src");
       checkAttr(child, "href");
       checkAttr(child, "data-src");
+      checkAttr(child, "data-url");
       checkAttr(child, "data-yaps-origin");
     }
 
-    // Sobe ate 4 pais para achar containers de anuncios com links
+    // Sobe ate 5 pais para achar containers de anuncios com links ou iframes
     let parent = el.parentElement;
     let depth = 0;
-    while (parent && depth < 4) {
+    while (parent && depth < 5) {
       checkAttr(parent, "data-yaps-origin");
-      const parentLink = parent.querySelector("a[href^='http']");
+      checkAttr(parent, "data-src");
+      checkAttr(parent, "src");
+
+      const parentLink = parent.querySelector("a[href^='http'], iframe[src^='http'], video[src^='http']");
       if (parentLink) {
         checkAttr(parentLink, "href");
+        checkAttr(parentLink, "src");
       }
       parent = parent.parentElement;
       depth++;

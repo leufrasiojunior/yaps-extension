@@ -33,17 +33,19 @@ async function render(): Promise<void> {
     if (typeof chrome !== "undefined" && chrome.tabs) {
       chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
         const tab = tabs[0];
+        let pageDomain = "";
         if (tab?.url) {
           try {
             const parsed = new URL(tab.url);
-            statCurrentDomain.textContent = parsed.hostname;
+            pageDomain = parsed.hostname;
+            statCurrentDomain.textContent = pageDomain;
           } catch {
             statCurrentDomain.textContent = "-";
           }
         }
 
-        // Pede resumo de deteccoes para o background
-        chrome.runtime.sendMessage({ type: "GET_PAGE_SUMMARY" }, (summary) => {
+        // Pede resumo de deteccoes para o background informando o dominio da aba ativa
+        chrome.runtime.sendMessage({ type: "GET_PAGE_SUMMARY", pageDomain }, (summary) => {
           if (summary?.count !== undefined) {
             statDetectedCount.textContent = String(summary.count);
           }

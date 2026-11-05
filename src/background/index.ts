@@ -46,7 +46,9 @@ if (typeof chrome !== "undefined" && chrome.runtime) {
     }
 
     if (message.type === "GET_PAGE_SUMMARY") {
-      const pageDomain = sender.tab?.url ? new URL(sender.tab.url).hostname : "";
+      const pageDomain =
+        message.pageDomain ||
+        (sender.tab?.url ? new URL(sender.tab.url).hostname : "");
       const summary = batchQueue.getPageSummary(pageDomain);
       sendResponse(summary);
       return true;

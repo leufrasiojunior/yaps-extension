@@ -11,6 +11,7 @@ import { extensionStorage } from "./storage";
 interface PageBatchState {
   page: PageContext;
   items: Map<string, DetectedTarget>;
+  reportedTargets: Map<string, DetectedTarget>;
   timer: ReturnType<typeof setTimeout> | null;
   tabId?: number;
 }
@@ -30,26 +31,41 @@ export class BatchQueueManager {
       batch = {
         page,
         items: new Map<string, DetectedTarget>(),
+        reportedTargets: new Map<string, DetectedTarget>(),
         timer: null,
         tabId,
       };
       this.batches.set(key, batch);
     }
 
-    // Deduplica por domínio do alvo (target) mantendo o de maior score
-    const existing = batch.items.get(target.target);
-    if (!existing || target.score > existing.score) {
-      batch.items.set(target.target, target);
+    if (tabId) {
+      batch.tabId = tabId;
     }
 
-    if (tabId && typeof chrome !== "undefined" && chrome.action) {
+    // Se o alvo já foi reportado nesta sessão de página com score igual ou maior, ignora
+    const alreadyReported = batch.reportedTargets.get(target.target);
+    if (alreadyReported && alreadyReported.score >= target.score) {
+      return;
+    }
+
+    // Deduplica nos itens pendentes mantendo o de maior score
+    const existing = batch.items.get(target.target);
+    if (existing && existing.score >= target.score) {
+      return;
+    }
+
+    batch.items.set(target.target, target);
+
+    const totalUniqueCount = batch.reportedTargets.size + batch.items.size;
+
+    if (batch.tabId && typeof chrome !== "undefined" && chrome.action) {
       chrome.action.setBadgeText({
-        tabId,
-        text: String(batch.items.size),
+        tabId: batch.tabId,
+        text: String(totalUniqueCount),
       });
       chrome.action.setBadgeBackgroundColor({
-        tabId,
-        color: "#dc2626", // vermelho para indicar detecções ativas
+        tabId: batch.tabId,
+        color: "#dc2626",
       });
     }
 
@@ -93,6 +109,12 @@ export class BatchQueueManager {
 
     const itemsToSend = Array.from(batch.items.values());
 
+    // Marca como reportados e limpa a fila de pendentes para não re-enviar repetidamente
+    for (const item of itemsToSend) {
+      batch.reportedTargets.set(item.target, item);
+    }
+    batch.items.clear();
+
     const payload: ReportExtensionPayload = {
       source: "browser_extension",
       extension: metadata,
@@ -118,9 +140,10 @@ export class BatchQueueManager {
     if (!batch) {
       return { count: 0, targets: [] };
     }
+    const allTargets = new Map([...batch.reportedTargets, ...batch.items]);
     return {
-      count: batch.items.size,
-      targets: Array.from(batch.items.values()),
+      count: allTargets.size,
+      targets: Array.from(allTargets.values()),
     };
   }
 }

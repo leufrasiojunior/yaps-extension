@@ -83,7 +83,7 @@ export type RuntimeMessage =
   | { type: "PICKER_DETECTED"; page: PageContext; candidate: DetectedTarget }
   | { type: "START_ELEMENT_PICKER" }
   | { type: "STOP_ELEMENT_PICKER" }
-  | { type: "GET_PAGE_SUMMARY"; tabId?: number }
+  | { type: "GET_PAGE_SUMMARY"; pageDomain?: string; tabId?: number }
   | {
       type: "MAIN_WORLD_INJECTION_DETECTED";
       scriptUrl?: string;
