@@ -1,0 +1,22 @@
+{
+  "name": "yaps-extension",
+  "version": "0.1.0",
+  "description": "Extensao de navegador (Chrome/Edge MV3) para auditoria e deteccao de anuncios e dominios integrada ao YAPD",
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/build.js --watch",
+    "build": "tsc --noEmit && node scripts/build.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check src",
+    "format": "biome format --write src",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/chrome": "^0.0.308",
+    "@types/node": "^22.13.10",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.1",
+    "vitest": "^3.0.8"
+  }
+}
