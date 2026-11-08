@@ -92,7 +92,14 @@ export type RuntimeMessage =
   | { type: "STOP_ELEMENT_PICKER" }
   | { type: "GET_PAGE_SUMMARY"; pageDomain?: string; tabId?: number }
   | { type: "SAVE_PAGE_ANALYSIS_TO_YAPD"; tabId: number; pageDomain?: string }
-  | { type: "QUICK_BLOCK_TARGET"; target: string; kind?: "exact" | "regex"; tabId?: number }
+  | {
+      type: "QUICK_BLOCK_TARGET";
+      target: string;
+      kind?: "exact" | "regex";
+      tabId?: number;
+      page?: PageContext;
+      domPathHash?: string;
+    }
   | { type: "QUICK_ALLOW_TARGET"; target: string; tabId?: number }
   | {
       type: "MAIN_WORLD_INJECTION_DETECTED";

@@ -34,6 +34,8 @@ const btnSaveConfig = document.getElementById("btn-save-config") as HTMLButtonEl
 const btnDisconnect = document.getElementById("btn-disconnect") as HTMLButtonElement;
 
 let currentActiveTabId: number | undefined;
+let currentActiveTabUrl: string | undefined;
+let currentActiveTabDomain: string | undefined;
 
 function switchTab(tab: "sentinel" | "settings"): void {
   if (tab === "sentinel") {
@@ -80,9 +82,11 @@ async function render(): Promise<void> {
         let pageDomain = "";
 
         if (tab?.url) {
+          currentActiveTabUrl = tab.url;
           try {
             const parsed = new URL(tab.url);
             pageDomain = parsed.hostname;
+            currentActiveTabDomain = pageDomain;
             statCurrentDomain.textContent = pageDomain;
           } catch {
             statCurrentDomain.textContent = "-";
@@ -167,6 +171,10 @@ function renderTargetsList(targets: DetectedTarget[], minScore: number): void {
           type: "QUICK_BLOCK_TARGET",
           target: item.target,
           tabId: currentActiveTabId,
+          page: {
+            url: currentActiveTabUrl || `https://${currentActiveTabDomain || "sentinel.local"}`,
+            domain: currentActiveTabDomain || "sentinel.local",
+          },
         },
         (res) => {
           if (res?.success) {

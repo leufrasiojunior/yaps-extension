@@ -1,4 +1,4 @@
-import { extractHostname } from "../shared/domain-utils";
+import { extractHostname, extractMainDomain } from "../shared/domain-utils";
 import type { PageContext, RuntimeMessage } from "../shared/types";
 import { yapdApiClient } from "./api-client";
 import { batchQueue } from "./batch-queue";
@@ -128,9 +128,43 @@ if (typeof chrome !== "undefined" && chrome.runtime) {
           (t) => t.target.toLowerCase() === message.target.toLowerCase(),
         );
 
+        let pageUrl = message.page?.url;
+        let pageDomain = message.page?.domain;
+
+        if (!pageDomain || pageDomain === "unknown") {
+          let resolvedTab: chrome.tabs.Tab | undefined = sender.tab;
+          if (!resolvedTab && targetTabId && typeof chrome !== "undefined" && chrome.tabs?.get) {
+            try {
+              resolvedTab = await chrome.tabs.get(targetTabId);
+            } catch {
+              // tab pode ter sido fechada
+            }
+          }
+          if (!resolvedTab && typeof chrome !== "undefined" && chrome.tabs?.query) {
+            try {
+              const activeTabs = await chrome.tabs.query({ active: true, currentWindow: true });
+              resolvedTab = activeTabs[0];
+            } catch {
+              // ignorar
+            }
+          }
+
+          if (resolvedTab?.url) {
+            pageUrl = resolvedTab.url;
+            pageDomain = extractHostname(resolvedTab.url) || undefined;
+          }
+        }
+
+        // Sanitização final para garantir FQDN válido para a API
+        if (!pageDomain || pageDomain === "unknown" || !pageDomain.includes(".")) {
+          pageDomain = extractMainDomain(message.target) || "sentinel.local";
+          pageUrl = pageUrl || `https://${pageDomain}`;
+        }
+
         const pageContext: PageContext = {
-          url: sender.tab?.url || "https://unknown.local",
-          domain: sender.tab?.url ? extractHostname(sender.tab.url) || "unknown" : "unknown",
+          url: pageUrl || `https://${pageDomain}`,
+          domain: pageDomain,
+          title: message.page?.title || sender.tab?.title,
         };
 
         const result = await yapdApiClient.applyBlockTarget(

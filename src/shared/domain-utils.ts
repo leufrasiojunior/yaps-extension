@@ -21,9 +21,34 @@ const MULTI_PART_TLDS = new Set([
 ]);
 
 export function extractHostname(rawUrl: string): string | null {
+  if (!rawUrl || typeof rawUrl !== "string") {
+    return null;
+  }
+
+  const trimmed = rawUrl.trim();
+  if (
+    !trimmed ||
+    trimmed.startsWith("javascript:") ||
+    trimmed.startsWith("about:") ||
+    trimmed.startsWith("data:")
+  ) {
+    return null;
+  }
+
+  // Se não tem protocolo e não tem ponto '.' nem é localhost, não é hostname válido
+  if (!trimmed.includes("://") && !trimmed.includes(".") && !trimmed.startsWith("localhost")) {
+    return null;
+  }
+
   try {
-    const url = new URL(rawUrl);
-    if (!url.hostname || url.protocol === "javascript:" || url.protocol === "about:") {
+    let toParse = trimmed;
+    if (toParse.startsWith("//")) {
+      toParse = `https:${toParse}`;
+    } else if (!toParse.includes("://")) {
+      toParse = `https://${toParse}`;
+    }
+    const url = new URL(toParse);
+    if (!url.hostname || (!url.hostname.includes(".") && url.hostname !== "localhost")) {
       return null;
     }
     return url.hostname.toLowerCase();
