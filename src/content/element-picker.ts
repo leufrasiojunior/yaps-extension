@@ -3,10 +3,11 @@ import type { PageContext } from "../shared/types";
 
 export class ElementPicker {
   private active = false;
+  private modalOpen = false;
   private backdrop: HTMLDivElement | null = null;
   private highlightBox: HTMLDivElement | null = null;
   private tooltip: HTMLDivElement | null = null;
-  private reviewModal: HTMLDivElement | null = null;
+  private modalHost: HTMLElement | null = null;
   private pageContext: PageContext;
   private originalWindowOpen: typeof window.open | null = null;
 
@@ -22,8 +23,9 @@ export class ElementPicker {
   start(): void {
     if (this.active) return;
     this.active = true;
+    this.modalOpen = false;
 
-    // 1. Desarma temporariamente window.open para impedir popunders/popups invasivos
+    // 1. Desarma temporariamente window.open para impedir que popunders/anúncios invasivos abram abas
     this.originalWindowOpen = window.open;
     try {
       window.open = () => {
@@ -34,27 +36,20 @@ export class ElementPicker {
       // Ignora se não for sobrescritível
     }
 
-    // 2. Cria elementos visuais
+    // 2. Cria elementos visuais de seleção (backdrop, highlightBox, tooltip)
     this.createDomElements();
 
-    // 3. Registra interceptadores globais na fase de captura (topo absoluto do DOM)
-    // Impede que scripts de anúncios capturem mousedown, pointerdown, click e abram novas abas
-    window.addEventListener("pointerdown", this.onCapturePointerEvent, true);
-    window.addEventListener("mousedown", this.onCapturePointerEvent, true);
-    window.addEventListener("pointerup", this.onCapturePointerEvent, true);
-    window.addEventListener("mouseup", this.onCapturePointerEvent, true);
-    window.addEventListener("auxclick", this.onCapturePointerEvent, true);
-    window.addEventListener("dblclick", this.onCapturePointerEvent, true);
-    window.addEventListener("click", this.onCaptureClick, true);
-    window.addEventListener("contextmenu", this.onContextMenu, true);
-    document.addEventListener("keydown", this.onKeyDown, true);
+    // 3. Registra interceptadores globais na fase de captura (topo absoluto da árvore do DOM)
+    // Isso garante que NENHUM script de anúncio da página capture o ponteiro antes da extensão
+    this.attachCaptureListeners();
 
     this.showToast("🎯 YAPD Sentinel: Clique no anúncio para revisar e bloquear (ESC para cancelar).");
   }
 
   stop(): void {
-    if (!this.active) return;
+    if (!this.active && !this.modalOpen) return;
     this.active = false;
+    this.modalOpen = false;
 
     // 1. Restaura window.open original
     if (this.originalWindowOpen) {
@@ -66,7 +61,27 @@ export class ElementPicker {
       this.originalWindowOpen = null;
     }
 
-    // 2. Remove interceptadores globais de captura
+    // 2. Remove todos os listeners
+    this.detachCaptureListeners();
+    document.removeEventListener("keydown", this.onKeyDown, true);
+
+    // 3. Remove todos os elementos da UI
+    this.removeDomElements();
+  }
+
+  private attachCaptureListeners(): void {
+    window.addEventListener("pointerdown", this.onCapturePointerEvent, true);
+    window.addEventListener("mousedown", this.onCapturePointerEvent, true);
+    window.addEventListener("pointerup", this.onCapturePointerEvent, true);
+    window.addEventListener("mouseup", this.onCapturePointerEvent, true);
+    window.addEventListener("auxclick", this.onCapturePointerEvent, true);
+    window.addEventListener("dblclick", this.onCapturePointerEvent, true);
+    window.addEventListener("click", this.onCaptureClick, true);
+    window.addEventListener("contextmenu", this.onContextMenu, true);
+    document.addEventListener("keydown", this.onKeyDown, true);
+  }
+
+  private detachCaptureListeners(): void {
     window.removeEventListener("pointerdown", this.onCapturePointerEvent, true);
     window.removeEventListener("mousedown", this.onCapturePointerEvent, true);
     window.removeEventListener("pointerup", this.onCapturePointerEvent, true);
@@ -75,20 +90,10 @@ export class ElementPicker {
     window.removeEventListener("dblclick", this.onCapturePointerEvent, true);
     window.removeEventListener("click", this.onCaptureClick, true);
     window.removeEventListener("contextmenu", this.onContextMenu, true);
-    document.removeEventListener("keydown", this.onKeyDown, true);
-
-    // 3. Remove elementos visuais
-    this.removeDomElements();
   }
 
   private onCapturePointerEvent(e: Event): void {
-    if (!this.active) return;
-
-    // Se o evento for dentro do reviewModal ou de um toast do YAPD, permite interação normal
-    const target = e.target as HTMLElement | null;
-    if (target && (target.closest("#yapd-sentinel-review-modal") || target.closest(".yapd-sentinel-toast"))) {
-      return;
-    }
+    if (!this.active || this.modalOpen) return;
 
     // Neutraliza qualquer tentativa do site/anúncio de disparar popup no pointerdown/mousedown
     e.preventDefault();
@@ -97,13 +102,7 @@ export class ElementPicker {
   }
 
   private onCaptureClick(e: MouseEvent): void {
-    if (!this.active) return;
-
-    // Se o clique for dentro do reviewModal ou de um toast, permite
-    const target = e.target as HTMLElement | null;
-    if (target && (target.closest("#yapd-sentinel-review-modal") || target.closest(".yapd-sentinel-toast"))) {
-      return;
-    }
+    if (!this.active || this.modalOpen) return;
 
     // Bloqueia a navegação e propagação do clique
     e.preventDefault();
@@ -186,8 +185,8 @@ export class ElementPicker {
     this.tooltip?.remove();
     this.tooltip = null;
 
-    this.reviewModal?.remove();
-    this.reviewModal = null;
+    this.modalHost?.remove();
+    this.modalHost = null;
   }
 
   private pickElementFromPoint(clientX: number, clientY: number): HTMLElement | null {
@@ -197,7 +196,7 @@ export class ElementPicker {
         el !== this.backdrop &&
         el !== this.highlightBox &&
         el !== this.tooltip &&
-        el !== this.reviewModal &&
+        el !== this.modalHost &&
         !el.classList.contains("yapd-sentinel-toast") &&
         el !== document.documentElement &&
         el !== document.body,
@@ -207,7 +206,7 @@ export class ElementPicker {
   }
 
   private onMouseMove(e: MouseEvent): void {
-    if (!this.active || !this.backdrop || !this.highlightBox || !this.tooltip) return;
+    if (!this.active || this.modalOpen || !this.backdrop || !this.highlightBox || !this.tooltip) return;
 
     const target = this.pickElementFromPoint(e.clientX, e.clientY);
 
@@ -238,7 +237,7 @@ export class ElementPicker {
         window.getComputedStyle(target).position === "absolute");
 
     if (isFullScreenOverlay) {
-      this.tooltip.textContent = `🚨 [Overlay / Popunder Invasivo Detectado] <${tag}> ${dim} (Clique para bloquear ou remover)`;
+      this.tooltip.textContent = `🚨 [Overlay Invasivo Detectado] <${tag}> ${dim} (Clique para bloquear ou remover)`;
       this.highlightBox.style.borderColor = "#f59e0b";
       this.highlightBox.style.backgroundColor = "rgba(245, 158, 11, 0.25)";
     } else {
@@ -258,7 +257,14 @@ export class ElementPicker {
   }
 
   private selectAndReviewElement(element: HTMLElement): void {
-    // Remove backdrop interativo e tooltip de hover para liberar a tela para o modal
+    // Transiciona para o modo de modal: pausa a captura de hover na página
+    this.modalOpen = true;
+    this.detachCaptureListeners();
+
+    // Mantém o keydown para ESC fechar o modal
+    document.addEventListener("keydown", this.onKeyDown, true);
+
+    // Remove backdrop interativo de hover e tooltip
     if (this.backdrop) {
       this.backdrop.remove();
       this.backdrop = null;
@@ -266,6 +272,14 @@ export class ElementPicker {
     if (this.tooltip) {
       this.tooltip.remove();
       this.tooltip = null;
+    }
+
+    // Se o elemento for um overlay cobrindo a tela inteira, desativa temporariamente seus pointer-events
+    // para que ele não capture cliques direcionados ao modal
+    try {
+      element.style.setProperty("pointer-events", "none", "important");
+    } catch {
+      // Ignora
     }
 
     // Extrai URLs do elemento clicado
@@ -294,12 +308,12 @@ export class ElementPicker {
       }
     }
 
-    // Abre o Modal de Revisão na tela
-    this.openReviewModal(element, candidateDomains);
+    // Abre o Modal com Shadow DOM Isolado na frente de qualquer elemento da página
+    this.openReviewModalWithShadowDom(element, candidateDomains);
   }
 
-  private openReviewModal(element: HTMLElement, candidateDomains: string[]): void {
-    this.reviewModal?.remove();
+  private openReviewModalWithShadowDom(element: HTMLElement, candidateDomains: string[]): void {
+    this.modalHost?.remove();
 
     const tag = element.tagName.toLowerCase();
     const rect = element.getBoundingClientRect();
@@ -311,100 +325,281 @@ export class ElementPicker {
       (window.getComputedStyle(element).position === "fixed" ||
         window.getComputedStyle(element).position === "absolute");
 
-    const modal = document.createElement("div");
-    modal.id = "yapd-sentinel-review-modal";
-    Object.assign(modal.style, {
+    // Cria o Host com Shadow DOM isolado
+    const host = document.createElement("yapd-sentinel-host");
+    host.id = "yapd-sentinel-host";
+    Object.assign(host.style, {
+      all: "initial",
       position: "fixed",
-      top: "50%",
-      left: "50%",
-      transform: "translate(-50%, -50%)",
+      inset: "0",
+      width: "100vw",
+      height: "100vh",
       zIndex: "2147483647",
-      width: "min(460px, calc(100vw - 32px))",
-      backgroundColor: "#18181b",
-      color: "#ffffff",
-      borderRadius: "10px",
-      boxShadow: "0 20px 40px rgba(0, 0, 0, 0.7)",
-      border: "1px solid #3f3f46",
-      padding: "20px",
-      fontFamily: "system-ui, -apple-system, sans-serif",
-      fontSize: "14px",
+      pointerEvents: "auto",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
     });
 
-    modal.innerHTML = `
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
-        <div style="font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 6px;">
-          <span>🎯</span>
-          <span>YAPD Sentinel - Revisar Alvo</span>
-        </div>
-        <button id="yapd-btn-modal-close" style="background: none; border: none; color: #a1a1aa; cursor: pointer; font-size: 18px; padding: 2px 6px;">✕</button>
-      </div>
+    const shadow = host.attachShadow({ mode: "open" });
 
-      ${
-        isFullScreenOverlay
-          ? `
-        <div style="background-color: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 6px; padding: 8px 10px; margin-bottom: 12px; font-size: 12px; color: #fbbf24;">
-          ⚠️ <strong>Overlay Invasivo Detectado:</strong> Este elemento cobre a maior parte da tela e intercepta cliques. Você pode bloqueá-lo no Pi-hole ou removê-lo da página imediatamente.
-        </div>
-      `
-          : ""
-      }
-
-      <div style="background-color: #27272a; border-radius: 6px; padding: 10px 12px; margin-bottom: 14px; font-size: 12px;">
-        <div style="color: #a1a1aa; margin-bottom: 2px;">Elemento inspecionado:</div>
-        <div style="font-family: monospace; color: #f43f5e; font-weight: 500;">
-          &lt;${tag}&gt; (${Math.round(rect.width)}x${Math.round(rect.height)}px)
-        </div>
-        ${element.id ? `<div style="color: #71717a; font-family: monospace;">#${element.id}</div>` : ""}
-        ${element.className && typeof element.className === "string" ? `<div style="color: #71717a; font-family: monospace; font-size: 11px; max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">.${element.className.trim().split(/\s+/).join(".")}</div>` : ""}
-      </div>
-
-      <div style="margin-bottom: 16px;">
-        <label style="display: block; font-size: 12px; font-weight: 500; color: #d4d4d8; margin-bottom: 6px;">
-          Domínio a ser bloqueado no Pi-hole:
-        </label>
-        ${
-          candidateDomains.length > 1
-            ? `
-          <select id="yapd-select-domain" style="width: 100%; padding: 8px 10px; background-color: #09090b; border: 1px solid #3f3f46; color: #ffffff; border-radius: 6px; font-family: monospace; font-size: 13px;">
-            ${candidateDomains.map((d) => `<option value="${d}">${d}</option>`).join("")}
-          </select>
-        `
-            : `
-          <input id="yapd-input-domain" type="text" value="${defaultDomain}" placeholder="ex: adnetwork.com" style="width: 100%; box-sizing: border-box; padding: 8px 10px; background-color: #09090b; border: 1px solid #3f3f46; color: #ffffff; border-radius: 6px; font-family: monospace; font-size: 13px;" />
-        `
+    // CSS e HTML encapsulados e imunes aos estilos e scripts da página
+    shadow.innerHTML = `
+      <style>
+        :host {
+          all: initial !important;
+          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+          box-sizing: border-box !important;
         }
-        ${
-          candidateDomains.length === 0
-            ? `<div style="color: #a1a1aa; font-size: 11px; margin-top: 4px;">Nenhum domínio explícito encontrado nos atributos. Digite o domínio acima ou remova o elemento.</div>`
-            : ""
+        *, *::before, *::after {
+          box-sizing: border-box !important;
+          margin: 0;
+          padding: 0;
         }
-      </div>
+        .backdrop-overlay {
+          position: fixed !important;
+          inset: 0 !important;
+          width: 100vw !important;
+          height: 100vh !important;
+          background: rgba(0, 0, 0, 0.75) !important;
+          backdrop-filter: blur(4px) !important;
+          z-index: 1 !important;
+          display: flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+        }
+        .modal-card {
+          position: relative !important;
+          z-index: 2 !important;
+          width: min(480px, calc(100vw - 32px)) !important;
+          background: #18181b !important;
+          color: #f4f4f5 !important;
+          border-radius: 12px !important;
+          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 0 1px #3f3f46 !important;
+          padding: 22px !important;
+          font-size: 14px !important;
+          line-height: 1.5 !important;
+        }
+        .header {
+          display: flex !important;
+          align-items: center !important;
+          justify-content: space-between !important;
+          margin-bottom: 16px !important;
+        }
+        .title {
+          font-size: 16px !important;
+          font-weight: 600 !important;
+          display: flex !important;
+          align-items: center !important;
+          gap: 8px !important;
+          color: #ffffff !important;
+        }
+        .btn-close {
+          background: transparent !important;
+          border: none !important;
+          color: #a1a1aa !important;
+          cursor: pointer !important;
+          font-size: 18px !important;
+          padding: 4px 8px !important;
+          border-radius: 6px !important;
+          transition: background 0.15s !important;
+        }
+        .btn-close:hover {
+          background: #27272a !important;
+          color: #ffffff !important;
+        }
+        .overlay-banner {
+          background: rgba(245, 158, 11, 0.15) !important;
+          border: 1px solid rgba(245, 158, 11, 0.4) !important;
+          border-radius: 8px !important;
+          padding: 10px 12px !important;
+          margin-bottom: 14px !important;
+          font-size: 12px !important;
+          color: #fbbf24 !important;
+        }
+        .element-preview {
+          background: #27272a !important;
+          border-radius: 8px !important;
+          padding: 12px !important;
+          margin-bottom: 16px !important;
+          font-size: 12px !important;
+          border: 1px solid #3f3f46 !important;
+        }
+        .element-label {
+          color: #a1a1aa !important;
+          font-size: 11px !important;
+          text-transform: uppercase !important;
+          letter-spacing: 0.05em !important;
+          margin-bottom: 4px !important;
+        }
+        .element-tag {
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+          color: #f43f5e !important;
+          font-weight: 600 !important;
+        }
+        .element-id-class {
+          color: #a1a1aa !important;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+          font-size: 11px !important;
+          margin-top: 2px !important;
+          word-break: break-all !important;
+        }
+        .form-group {
+          margin-bottom: 18px !important;
+        }
+        .form-label {
+          display: block !important;
+          font-size: 12px !important;
+          font-weight: 500 !important;
+          color: #d4d4d8 !important;
+          margin-bottom: 6px !important;
+        }
+        .input-text, .select-domain {
+          width: 100% !important;
+          background: #09090b !important;
+          border: 1px solid #3f3f46 !important;
+          color: #ffffff !important;
+          border-radius: 8px !important;
+          padding: 9px 12px !important;
+          font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+          font-size: 13px !important;
+          outline: none !important;
+          transition: border-color 0.15s !important;
+        }
+        .input-text:focus, .select-domain:focus {
+          border-color: #ef4444 !important;
+        }
+        .actions-bar {
+          display: flex !important;
+          align-items: center !important;
+          justify-content: space-between !important;
+          gap: 10px !important;
+          margin-top: 20px !important;
+        }
+        .btn {
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          gap: 6px !important;
+          padding: 9px 16px !important;
+          border-radius: 8px !important;
+          font-size: 13px !important;
+          font-weight: 500 !important;
+          cursor: pointer !important;
+          border: none !important;
+          transition: all 0.15s !important;
+        }
+        .btn-cancel {
+          background: transparent !important;
+          border: 1px solid #3f3f46 !important;
+          color: #d4d4d8 !important;
+        }
+        .btn-cancel:hover {
+          background: #27272a !important;
+          color: #ffffff !important;
+        }
+        .btn-remove {
+          background: #27272a !important;
+          border: 1px solid #ef4444 !important;
+          color: #f87171 !important;
+        }
+        .btn-remove:hover {
+          background: rgba(239, 68, 68, 0.2) !important;
+          color: #ffffff !important;
+        }
+        .btn-block {
+          background: #dc2626 !important;
+          color: #ffffff !important;
+          font-weight: 600 !important;
+        }
+        .btn-block:hover {
+          background: #b91c1c !important;
+        }
+        .btn:disabled {
+          opacity: 0.6 !important;
+          cursor: not-allowed !important;
+        }
+      </style>
 
-      <div style="display: flex; gap: 8px; justify-content: space-between; align-items: center;">
-        <button id="yapd-btn-remove-elem" style="padding: 8px 12px; border-radius: 6px; background-color: #27272a; border: 1px solid #3f3f46; color: #f43f5e; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 4px;" title="Remove este elemento do HTML para destravar a navegação imediatamente">
-          <span>🗑️</span>
-          <span>Remover da tela</span>
-        </button>
+      <div class="backdrop-overlay" id="yapd-backdrop-click">
+        <div class="modal-card" id="yapd-modal-card">
+          <div class="header">
+            <div class="title">
+              <span>🎯</span>
+              <span>YAPD Sentinel - Revisar Alvo</span>
+            </div>
+            <button class="btn-close" id="yapd-btn-close" title="Fechar">✕</button>
+          </div>
 
-        <div style="display: flex; gap: 8px;">
-          <button id="yapd-btn-cancel" style="padding: 8px 14px; border-radius: 6px; background-color: transparent; border: 1px solid #3f3f46; color: #ffffff; cursor: pointer; font-size: 13px;">
-            Cancelar
-          </button>
-          <button id="yapd-btn-block" style="padding: 8px 14px; border-radius: 6px; background-color: #dc2626; border: none; color: #ffffff; font-weight: 600; cursor: pointer; font-size: 13px; display: flex; align-items: center; gap: 6px;">
-            <span>🛡️</span>
-            <span>Bloquear no Pi-hole</span>
-          </button>
+          ${
+            isFullScreenOverlay
+              ? `
+            <div class="overlay-banner">
+              🚨 <strong>Overlay Invasivo Detectado:</strong> Este elemento cobre a maior parte da tela e intercepta cliques. Você pode bloqueá-lo no Pi-hole ou removê-lo da página imediatamente.
+            </div>
+          `
+              : ""
+          }
+
+          <div class="element-preview">
+            <div class="element-label">Elemento Inspecionado</div>
+            <div class="element-tag">&lt;${tag}&gt; (${Math.round(rect.width)}x${Math.round(rect.height)}px)</div>
+            ${element.id ? `<div class="element-id-class">#${element.id}</div>` : ""}
+            ${
+              element.className && typeof element.className === "string"
+                ? `<div class="element-id-class">.${element.className.trim().split(/\s+/).slice(0, 5).join(".")}</div>`
+                : ""
+            }
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Domínio para Bloquear no Pi-hole:</label>
+            ${
+              candidateDomains.length > 1
+                ? `
+              <select class="select-domain" id="yapd-select-domain">
+                ${candidateDomains.map((d) => `<option value="${d}">${d}</option>`).join("")}
+              </select>
+            `
+                : `
+              <input class="input-text" id="yapd-input-domain" type="text" value="${defaultDomain}" placeholder="ex: adnetwork.com" />
+            `
+            }
+            ${
+              candidateDomains.length === 0
+                ? `<div style="color: #a1a1aa; font-size: 11px; margin-top: 6px;">Nenhum domínio explícito encontrado nos atributos. Digite o domínio acima ou remova o elemento invasivo da tela.</div>`
+                : ""
+            }
+          </div>
+
+          <div class="actions-bar">
+            <button class="btn btn-remove" id="yapd-btn-remove" title="Remove este elemento do HTML para destravar a navegação imediatamente">
+              <span>🗑️</span>
+              <span>Remover da tela</span>
+            </button>
+
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-cancel" id="yapd-btn-cancel">Cancelar</button>
+              <button class="btn btn-block" id="yapd-btn-block">
+                <span>🛡️</span>
+                <span>Bloquear no Pi-hole</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     `;
 
-    document.documentElement.appendChild(modal);
-    this.reviewModal = modal;
+    // Anexa no topo absoluto do documento HTML
+    (document.documentElement || document.body).appendChild(host);
+    this.modalHost = host;
 
-    const btnClose = modal.querySelector("#yapd-btn-modal-close");
-    const btnCancel = modal.querySelector("#yapd-btn-cancel");
-    const btnRemoveElem = modal.querySelector("#yapd-btn-remove-elem");
-    const btnBlock = modal.querySelector("#yapd-btn-block") as HTMLButtonElement;
+    // Configura manipuladores de eventos dentro da Shadow Root
+    const btnClose = shadow.getElementById("yapd-btn-close");
+    const btnCancel = shadow.getElementById("yapd-btn-cancel");
+    const btnRemove = shadow.getElementById("yapd-btn-remove");
+    const btnBlock = shadow.getElementById("yapd-btn-block") as HTMLButtonElement | null;
+    const modalCard = shadow.getElementById("yapd-modal-card");
 
     const closeHandler = () => {
       this.stop();
@@ -413,8 +608,13 @@ export class ElementPicker {
     btnClose?.addEventListener("click", closeHandler);
     btnCancel?.addEventListener("click", closeHandler);
 
-    // Botão para remover o elemento invasivo da tela
-    btnRemoveElem?.addEventListener("click", () => {
+    // Impede que cliques dentro do card do modal fechem o modal
+    modalCard?.addEventListener("click", (e) => {
+      e.stopPropagation();
+    });
+
+    // Botão de remoção do elemento invasivo
+    btnRemove?.addEventListener("click", () => {
       try {
         element.remove();
         this.showToast("🗑️ Elemento removido da página com sucesso!");
@@ -425,10 +625,11 @@ export class ElementPicker {
       this.stop();
     });
 
+    // Botão de bloqueio direto no Pi-hole
     btnBlock?.addEventListener("click", async () => {
       let targetDomain = defaultDomain;
-      const select = modal.querySelector("#yapd-select-domain") as HTMLSelectElement | null;
-      const input = modal.querySelector("#yapd-input-domain") as HTMLInputElement | null;
+      const select = shadow.getElementById("yapd-select-domain") as HTMLSelectElement | null;
+      const input = shadow.getElementById("yapd-input-domain") as HTMLInputElement | null;
 
       if (select) {
         targetDomain = select.value;
@@ -469,7 +670,7 @@ export class ElementPicker {
   }
 
   private onContextMenu(e: MouseEvent): void {
-    if (!this.active) return;
+    if (!this.active || this.modalOpen) return;
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
@@ -603,7 +804,7 @@ export class ElementPicker {
       pointerEvents: "none",
     });
     toast.textContent = message;
-    document.documentElement.appendChild(toast);
+    (document.documentElement || document.body).appendChild(toast);
 
     setTimeout(() => {
       toast.style.opacity = "0";
