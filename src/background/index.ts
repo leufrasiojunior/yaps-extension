@@ -174,6 +174,10 @@ if (typeof chrome !== "undefined" && chrome.runtime) {
           message.kind || "exact",
         );
 
+        if (result.success) {
+          batchQueue.markTargetAsBlocked(message.target, targetTabId);
+        }
+
         sendResponse(result);
       });
       return true;

@@ -5,6 +5,7 @@ export class ElementPicker {
   private active = false;
   private modalOpen = false;
   private backdrop: HTMLDivElement | null = null;
+  private cancelBar: HTMLDivElement | null = null;
   private highlightBox: HTMLDivElement | null = null;
   private tooltip: HTMLDivElement | null = null;
   private reviewDialog: HTMLDialogElement | null = null;
@@ -171,9 +172,67 @@ export class ElementPicker {
 
     this.backdrop.addEventListener("mousemove", this.onMouseMove);
 
+    // Barra flutuante de status com botão de cancelar
+    this.cancelBar = document.createElement("div");
+    this.cancelBar.id = "yapd-sentinel-cancel-bar";
+    Object.assign(this.cancelBar.style, {
+      position: "fixed",
+      top: "16px",
+      left: "50%",
+      transform: "translateX(-50%)",
+      zIndex: "2147483647",
+      backgroundColor: "#18181b",
+      color: "#f4f4f5",
+      padding: "8px 16px",
+      borderRadius: "9999px",
+      boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.7), 0 0 0 1px #3f3f46",
+      display: "flex",
+      alignItems: "center",
+      gap: "12px",
+      fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      fontSize: "13px",
+      fontWeight: "500",
+      pointerEvents: "auto",
+    });
+
+    const barLabel = document.createElement("span");
+    barLabel.textContent = "🎯 Modo Inspecionar Ad Ativo";
+
+    const barCancelBtn = document.createElement("button");
+    barCancelBtn.id = "yapd-btn-cancel-bar";
+    barCancelBtn.textContent = "✕ Cancelar (ESC)";
+    Object.assign(barCancelBtn.style, {
+      backgroundColor: "#ef4444",
+      color: "#ffffff",
+      border: "none",
+      borderRadius: "9999px",
+      padding: "4px 12px",
+      fontSize: "12px",
+      fontWeight: "600",
+      cursor: "pointer",
+      transition: "background-color 0.15s ease",
+    });
+    barCancelBtn.addEventListener("mouseenter", () => {
+      barCancelBtn.style.backgroundColor = "#dc2626";
+    });
+    barCancelBtn.addEventListener("mouseleave", () => {
+      barCancelBtn.style.backgroundColor = "#ef4444";
+    });
+    barCancelBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      this.stop();
+      this.showToast("Inspetor cancelado.");
+    });
+
+    this.cancelBar.appendChild(barLabel);
+    this.cancelBar.appendChild(barCancelBtn);
+
     document.documentElement.appendChild(this.backdrop);
     document.documentElement.appendChild(this.highlightBox);
     document.documentElement.appendChild(this.tooltip);
+    document.documentElement.appendChild(this.cancelBar);
   }
 
   private removeDomElements(): void {
@@ -182,6 +241,9 @@ export class ElementPicker {
       this.backdrop.remove();
       this.backdrop = null;
     }
+
+    this.cancelBar?.remove();
+    this.cancelBar = null;
 
     this.highlightBox?.remove();
     this.highlightBox = null;
@@ -230,6 +292,8 @@ export class ElementPicker {
     const target = elements.find(
       (el) =>
         el !== this.backdrop &&
+        el !== this.cancelBar &&
+        !el.closest("#yapd-sentinel-cancel-bar") &&
         el !== this.highlightBox &&
         el !== this.tooltip &&
         el !== this.reviewDialog &&
@@ -301,10 +365,14 @@ export class ElementPicker {
     // Mantém o keydown para ESC fechar o modal
     document.addEventListener("keydown", this.onKeyDown, true);
 
-    // 2. Remove backdrop interativo de hover e tooltip
+    // 2. Remove backdrop interativo de hover, barra de cancelamento e tooltip
     if (this.backdrop) {
       this.backdrop.remove();
       this.backdrop = null;
+    }
+    if (this.cancelBar) {
+      this.cancelBar.remove();
+      this.cancelBar = null;
     }
     if (this.tooltip) {
       this.tooltip.remove();

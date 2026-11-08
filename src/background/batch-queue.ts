@@ -20,6 +20,7 @@ interface TabSessionState {
 export class BatchQueueManager {
   private sessions = new Map<number, TabSessionState>();
   private domainFallbackMap = new Map<string, TabSessionState>();
+  private blockedTargets = new Set<string>();
 
   constructor() {
     if (typeof chrome !== "undefined" && chrome.tabs?.onRemoved) {
@@ -74,6 +75,13 @@ export class BatchQueueManager {
     const existing = session.targets.get(target.target);
     if (existing && existing.score >= target.score) {
       return;
+    }
+
+    if (
+      this.blockedTargets.has(target.target.toLowerCase()) ||
+      this.blockedTargets.has(extractMainDomain(target.target))
+    ) {
+      target.isBlocked = true;
     }
 
     session.targets.set(target.target, target);
@@ -163,15 +171,51 @@ export class BatchQueueManager {
     }
   }
 
+  markTargetAsBlocked(target: string, _tabId?: number): void {
+    const normalized = target.toLowerCase().trim();
+    const main = extractMainDomain(normalized);
+    this.blockedTargets.add(normalized);
+    if (main) {
+      this.blockedTargets.add(main);
+    }
+
+    // Marca imediatamente nas sessões ativas
+    for (const session of this.sessions.values()) {
+      for (const [, item] of session.targets.entries()) {
+        const itemTarget = item.target.toLowerCase();
+        const itemMain = extractMainDomain(itemTarget);
+        if (
+          itemTarget === normalized ||
+          itemTarget === main ||
+          itemMain === normalized ||
+          itemMain === main
+        ) {
+          item.isBlocked = true;
+        }
+      }
+    }
+  }
+
   getPageSummary(
     pageDomain?: string,
     tabId?: number,
   ): { count: number; targets: DetectedTarget[]; savedToYapd: boolean } {
+    const mapItems = (items: DetectedTarget[]) =>
+      items
+        .map((item) => ({
+          ...item,
+          isBlocked:
+            item.isBlocked ||
+            this.blockedTargets.has(item.target.toLowerCase()) ||
+            this.blockedTargets.has(extractMainDomain(item.target)),
+        }))
+        .sort((a, b) => b.score - a.score);
+
     if (tabId && this.sessions.has(tabId)) {
       const session = this.sessions.get(tabId)!;
       return {
         count: session.targets.size,
-        targets: Array.from(session.targets.values()).sort((a, b) => b.score - a.score),
+        targets: mapItems(Array.from(session.targets.values())),
         savedToYapd: session.savedToYapd,
       };
     }
@@ -182,7 +226,7 @@ export class BatchQueueManager {
       if (session) {
         return {
           count: session.targets.size,
-          targets: Array.from(session.targets.values()).sort((a, b) => b.score - a.score),
+          targets: mapItems(Array.from(session.targets.values())),
           savedToYapd: session.savedToYapd,
         };
       }

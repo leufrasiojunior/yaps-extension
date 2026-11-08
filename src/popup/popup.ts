@@ -28,6 +28,7 @@ const targetsListContainer = document.getElementById("targets-list") as HTMLElem
 // Elementos da Aba Configurações
 const cfgYapdUrl = document.getElementById("cfg-yapd-url") as HTMLInputElement;
 const cfgToken = document.getElementById("cfg-token") as HTMLInputElement;
+const btnToggleToken = document.getElementById("btn-toggle-token") as HTMLButtonElement | null;
 const cfgMinScore = document.getElementById("cfg-min-score") as HTMLInputElement;
 const cfgAutoSend = document.getElementById("cfg-auto-send") as HTMLInputElement;
 const btnSaveConfig = document.getElementById("btn-save-config") as HTMLButtonElement;
@@ -54,6 +55,16 @@ function switchTab(tab: "sentinel" | "settings"): void {
 tabBtnSentinel?.addEventListener("click", () => switchTab("sentinel"));
 tabBtnSettings?.addEventListener("click", () => switchTab("settings"));
 
+btnToggleToken?.addEventListener("click", () => {
+  if (cfgToken.type === "password") {
+    cfgToken.type = "text";
+    btnToggleToken.textContent = "🙈";
+  } else {
+    cfgToken.type = "password";
+    btnToggleToken.textContent = "👁️";
+  }
+});
+
 async function render(): Promise<void> {
   const state = await extensionStorage.getState();
 
@@ -71,6 +82,8 @@ async function render(): Promise<void> {
     // Preenche campos de configurações
     cfgYapdUrl.value = state.yapdBaseUrl || "http://localhost:3000";
     cfgToken.value = state.token;
+    cfgToken.type = "password";
+    if (btnToggleToken) btnToggleToken.textContent = "👁️";
     cfgMinScore.value = String(threshold);
     cfgAutoSend.checked = Boolean(state.settings.autoSendToYapd);
 
@@ -160,34 +173,41 @@ function renderTargetsList(targets: DetectedTarget[], minScore: number): void {
 
     const btnBlock = document.createElement("button");
     btnBlock.className = "btn-quick-block";
-    btnBlock.textContent = "Bloquear";
 
-    btnBlock.addEventListener("click", () => {
+    if (item.isBlocked) {
+      btnBlock.textContent = "✓ Bloqueado";
       btnBlock.disabled = true;
-      btnBlock.textContent = "Bloqueando...";
+      btnBlock.classList.add("blocked");
+    } else {
+      btnBlock.textContent = "Bloquear";
+      btnBlock.addEventListener("click", () => {
+        btnBlock.disabled = true;
+        btnBlock.textContent = "Bloqueando...";
 
-      chrome.runtime.sendMessage(
-        {
-          type: "QUICK_BLOCK_TARGET",
-          target: item.target,
-          tabId: currentActiveTabId,
-          page: {
-            url: currentActiveTabUrl || `https://${currentActiveTabDomain || "sentinel.local"}`,
-            domain: currentActiveTabDomain || "sentinel.local",
+        chrome.runtime.sendMessage(
+          {
+            type: "QUICK_BLOCK_TARGET",
+            target: item.target,
+            tabId: currentActiveTabId,
+            page: {
+              url: currentActiveTabUrl || `https://${currentActiveTabDomain || "sentinel.local"}`,
+              domain: currentActiveTabDomain || "sentinel.local",
+            },
           },
-        },
-        (res) => {
-          if (res?.success) {
-            btnBlock.textContent = "Bloqueado";
-            btnBlock.classList.add("blocked");
-          } else {
-            btnBlock.disabled = false;
-            btnBlock.textContent = "Erro";
-            alert(`Falha ao bloquear: ${res?.message || "erro de rede"}`);
-          }
-        },
-      );
-    });
+          (res) => {
+            if (res?.success) {
+              item.isBlocked = true;
+              btnBlock.textContent = "✓ Bloqueado";
+              btnBlock.classList.add("blocked");
+            } else {
+              btnBlock.disabled = false;
+              btnBlock.textContent = "Bloquear";
+              alert(`Falha ao bloquear: ${res?.message || "erro de rede"}`);
+            }
+          },
+        );
+      });
+    }
 
     row.appendChild(info);
     row.appendChild(btnBlock);

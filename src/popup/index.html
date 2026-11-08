@@ -54,7 +54,7 @@
 
       <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px;">
         <button id="btn-start-picker" class="btn btn-primary">
-          🎯 Inspecionar Elemento (Clique)
+          🎯 Inspecionar Ad
         </button>
         <button id="btn-save-analysis" class="btn btn-success">
           📤 Salvar Análise no YAPD
@@ -85,7 +85,10 @@
 
         <div class="field">
           <label for="cfg-token">Token de Pareamento</label>
-          <input type="text" id="cfg-token" placeholder="Token Bearer da extensão" style="font-family: monospace; font-size: 11px;">
+          <div class="password-input-wrapper">
+            <input type="password" id="cfg-token" placeholder="Token Bearer da extensão" style="font-family: monospace; font-size: 11px;">
+            <button type="button" id="btn-toggle-token" class="btn-toggle-token" title="Mostrar/Ocultar token">👁️</button>
+          </div>
           <p class="helper-text" style="color: #f87171; margin-top: 4px;">
             ⚠️ Se apagar e deixar o campo vazio, remove a integração com o YAPD.
           </p>

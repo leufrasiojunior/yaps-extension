@@ -141,6 +141,40 @@ body {
   border-color: var(--primary);
 }
 
+.password-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.password-input-wrapper input {
+  width: 100%;
+  padding-right: 36px;
+}
+
+.btn-toggle-token {
+  position: absolute;
+  right: 6px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--muted-foreground);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  transition: opacity 0.15s ease;
+}
+
+.btn-toggle-token:hover {
+  opacity: 0.8;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
@@ -300,7 +334,8 @@ body {
 
 .btn-quick-block.blocked {
   background-color: #27272a;
-  color: #71717a;
+  color: #a1a1aa;
+  border: 1px solid #3f3f46;
   cursor: default;
 }
 

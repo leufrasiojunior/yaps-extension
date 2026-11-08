@@ -27,6 +27,7 @@ export type DetectedTarget = {
   riskLevel: RiskLevel;
   reasons: string[];
   evidence: DetectionEvidence;
+  isBlocked?: boolean;
 };
 
 export type PageContext = {
