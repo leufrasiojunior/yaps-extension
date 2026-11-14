@@ -17,6 +17,23 @@ import { MutationTracker } from "./mutation-tracker";
   // O Element Picker deve operar apenas no top frame para cobrir a viewport inteira sem conflitos
   const picker = isTopFrame ? new ElementPicker(pageContext) : null;
 
+  // Sinalização de presença para páginas de gestão do YAPD
+  if (isTopFrame) {
+    try {
+      document.documentElement.setAttribute("data-yapd-extension-installed", "true");
+      window.postMessage({ type: "YAPD_EXTENSION_PONG", version: "0.2.0" }, "*");
+
+      window.addEventListener("message", (event) => {
+        if (event.data?.type === "YAPD_EXTENSION_PING") {
+          document.documentElement.setAttribute("data-yapd-extension-installed", "true");
+          window.postMessage({ type: "YAPD_EXTENSION_PONG", version: "0.2.0" }, "*");
+        }
+      });
+    } catch {
+      // Ignora restrições de sandbox
+    }
+  }
+
   if (typeof chrome !== "undefined" && chrome.runtime && isTopFrame) {
     chrome.runtime.onMessage.addListener((message: RuntimeMessage, _sender, sendResponse) => {
       if (message.type === "START_ELEMENT_PICKER") {

@@ -2,6 +2,13 @@
 // Instrumenta APIs nativas de forma puramente observadora e 100% compativel com Trusted Types e CSP restrita
 
 (() => {
+  try {
+    (window as unknown as { __YAPD_EXTENSION_INSTALLED__?: boolean }).__YAPD_EXTENSION_INSTALLED__ = true;
+    document.documentElement.setAttribute("data-yapd-extension-installed", "true");
+  } catch {
+    // Ignora restrições de CSP/sandbox
+  }
+
   if ((window as unknown as { __yaps_main_injected?: boolean }).__yaps_main_injected) {
     return;
   }
