@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "node scripts/build.js --watch",
-    "build": "tsc --noEmit && node scripts/build.js",
+    "build": "tsc --noEmit && node scripts/build.js && python3 scripts/create-zip.py",
+    "package": "python3 scripts/create-zip.py",
     "typecheck": "tsc --noEmit",
     "lint": "biome check src",
     "format": "biome format --write src",

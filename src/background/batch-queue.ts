@@ -5,6 +5,7 @@ import type {
   ExtensionMetadata,
   PageContext,
   ReportExtensionPayload,
+  ReportTargetItem,
 } from "../shared/types";
 import { yapdApiClient } from "./api-client";
 import { extensionStorage } from "./storage";
@@ -119,10 +120,20 @@ export class BatchQueueManager {
     });
   }
 
-  async flushSession(tabId: number): Promise<{ success: boolean; batchId?: string }> {
-    const session = this.sessions.get(tabId);
+  async flushSession(
+    tabId?: number,
+    pageDomain?: string,
+  ): Promise<{ success: boolean; batchId?: string; message?: string }> {
+    let session: TabSessionState | undefined;
+    if (tabId && this.sessions.has(tabId)) {
+      session = this.sessions.get(tabId);
+    } else if (pageDomain) {
+      const mainDomain = extractMainDomain(pageDomain.toLowerCase());
+      session = this.domainFallbackMap.get(mainDomain);
+    }
+
     if (!session || session.targets.size === 0) {
-      return { success: false };
+      return { success: false, message: "Não há dados ou rastreadores pendentes nesta página." };
     }
 
     if (session.debounceTimer) {
@@ -132,7 +143,7 @@ export class BatchQueueManager {
 
     const state = await extensionStorage.getState();
     if (!state.paired || !state.extensionId) {
-      return { success: false };
+      return { success: false, message: "A extensão não está conectada ao YAPD." };
     }
 
     const metadata: ExtensionMetadata = {
@@ -145,29 +156,52 @@ export class BatchQueueManager {
 
     const itemsToSend = Array.from(session.targets.values());
 
+    const mappedTargets: ReportTargetItem[] = itemsToSend.map((target) => ({
+      candidateId: target.candidateId,
+      target: target.target.trim().toLowerCase(),
+      category: target.category || "ads",
+      score: Math.max(0, Math.min(100, Math.round(target.score))),
+      riskLevel:
+        target.riskLevel || (target.score >= 70 ? "high" : target.score >= 30 ? "medium" : "low"),
+      reasons:
+        target.reasons && target.reasons.length > 0 ? target.reasons : ["Rastreador detectado"],
+      evidence: {
+        url: target.evidence?.url ? target.evidence.url.slice(0, 2048) : undefined,
+        source: (target.evidence?.source || "web_request").slice(0, 100),
+        resourceType: (target.evidence?.resourceType || "unknown").slice(0, 100),
+        isThirdParty: Boolean(target.evidence?.isThirdParty),
+      },
+    }));
+
+    const cleanDomain = session.page.domain.trim().toLowerCase().slice(0, 253);
+    const cleanUrl = session.page.url.slice(0, 2048);
+
     const payload: ReportExtensionPayload = {
       source: "browser_extension",
       extension: metadata,
       clientRequestId: `req-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       page: {
-        url: session.page.url,
-        domain: session.page.domain,
-        title: state.settings.sendPageTitle ? session.page.title : undefined,
+        url: cleanUrl,
+        domain: cleanDomain,
+        title:
+          state.settings.sendPageTitle && session.page.title
+            ? session.page.title.slice(0, 300)
+            : undefined,
       },
       action: "report_detected_items",
-      detectedTargets: itemsToSend,
+      detectedTargets: mappedTargets,
     };
 
     try {
       const res = await yapdApiClient.sendReport(payload);
-      if (res?.batchId) {
+      if (res.success && res.batchId) {
         session.savedToYapd = true;
         return { success: true, batchId: res.batchId };
       }
-      return { success: false };
+      return { success: false, message: res.message || "Falha ao salvar no YAPD." };
     } catch (err) {
       console.error("[YAPD Sentinel] Erro ao despachar análise para o YAPD:", err);
-      return { success: false };
+      return { success: false, message: (err as Error).message };
     }
   }
 
@@ -211,12 +245,12 @@ export class BatchQueueManager {
         }))
         .sort((a, b) => b.score - a.score);
 
-    if (tabId && this.sessions.has(tabId)) {
-      const session = this.sessions.get(tabId)!;
+    const tabSession = tabId ? this.sessions.get(tabId) : undefined;
+    if (tabSession) {
       return {
-        count: session.targets.size,
-        targets: mapItems(Array.from(session.targets.values())),
-        savedToYapd: session.savedToYapd,
+        count: tabSession.targets.size,
+        targets: mapItems(Array.from(tabSession.targets.values())),
+        savedToYapd: tabSession.savedToYapd,
       };
     }
 

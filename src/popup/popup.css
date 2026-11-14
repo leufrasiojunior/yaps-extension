@@ -126,7 +126,8 @@ body {
   letter-spacing: 0.5px;
 }
 
-.field input, .field select {
+.field input,
+.field select {
   width: 100%;
   padding: 8px 10px;
   background-color: #09090b;
@@ -136,7 +137,8 @@ body {
   font-size: 12px;
 }
 
-.field input:focus, .field select:focus {
+.field input:focus,
+.field select:focus {
   outline: none;
   border-color: var(--primary);
 }

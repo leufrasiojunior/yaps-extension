@@ -44,13 +44,28 @@ export type ExtensionMetadata = {
   manifestVersion: number;
 };
 
+export type ReportTargetItem = {
+  candidateId: string;
+  target: string;
+  category: string;
+  score: number;
+  riskLevel: RiskLevel;
+  reasons: string[];
+  evidence: {
+    url?: string;
+    source: string;
+    resourceType?: string;
+    isThirdParty: boolean;
+  };
+};
+
 export type ReportExtensionPayload = {
   source: "browser_extension";
   extension: ExtensionMetadata;
   clientRequestId: string;
   page: PageContext;
   action: "report_detected_items";
-  detectedTargets: DetectedTarget[];
+  detectedTargets: ReportTargetItem[];
 };
 
 export type ExtensionSettings = {
@@ -92,7 +107,7 @@ export type RuntimeMessage =
   | { type: "START_ELEMENT_PICKER" }
   | { type: "STOP_ELEMENT_PICKER" }
   | { type: "GET_PAGE_SUMMARY"; pageDomain?: string; tabId?: number }
-  | { type: "SAVE_PAGE_ANALYSIS_TO_YAPD"; tabId: number; pageDomain?: string }
+  | { type: "SAVE_PAGE_ANALYSIS_TO_YAPD"; tabId?: number; pageDomain?: string }
   | {
       type: "QUICK_BLOCK_TARGET";
       target: string;

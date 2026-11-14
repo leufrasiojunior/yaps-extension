@@ -3,7 +3,8 @@
 
 (() => {
   try {
-    (window as unknown as { __YAPD_EXTENSION_INSTALLED__?: boolean }).__YAPD_EXTENSION_INSTALLED__ = true;
+    (window as unknown as { __YAPD_EXTENSION_INSTALLED__?: boolean }).__YAPD_EXTENSION_INSTALLED__ =
+      true;
     document.documentElement.setAttribute("data-yapd-extension-installed", "true");
   } catch {
     // Ignora restrições de CSP/sandbox

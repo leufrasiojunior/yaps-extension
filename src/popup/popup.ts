@@ -252,13 +252,17 @@ btnStartPicker?.addEventListener("click", () => {
 });
 
 btnSaveAnalysis?.addEventListener("click", () => {
-  if (!currentActiveTabId) return;
+  if (!currentActiveTabId && !currentActiveTabDomain) return;
 
   btnSaveAnalysis.disabled = true;
   btnSaveAnalysis.textContent = "Salvando...";
 
   chrome.runtime.sendMessage(
-    { type: "SAVE_PAGE_ANALYSIS_TO_YAPD", tabId: currentActiveTabId },
+    {
+      type: "SAVE_PAGE_ANALYSIS_TO_YAPD",
+      tabId: currentActiveTabId,
+      pageDomain: currentActiveTabDomain,
+    },
     (res) => {
       btnSaveAnalysis.disabled = false;
       if (res?.success) {
@@ -267,7 +271,7 @@ btnSaveAnalysis?.addEventListener("click", () => {
         btnSaveAnalysis.classList.add("btn-outline");
       } else {
         btnSaveAnalysis.textContent = "📤 Salvar Análise no YAPD";
-        alert("Não há dados pendentes ou falha ao salvar no YAPD.");
+        alert(res?.message || "Não há dados pendentes ou falha ao salvar no YAPD.");
       }
     },
   );
@@ -275,7 +279,10 @@ btnSaveAnalysis?.addEventListener("click", () => {
 
 btnOpenYapd?.addEventListener("click", async () => {
   const state = await extensionStorage.getState();
-  const rootUrl = state.yapdBaseUrl.trim().replace(/\/+$/, "").replace(/\/api$/, "");
+  const rootUrl = state.yapdBaseUrl
+    .trim()
+    .replace(/\/+$/, "")
+    .replace(/\/api$/, "");
   const url = `${rootUrl}/browser-extension`;
   if (typeof chrome !== "undefined" && chrome.tabs) {
     chrome.tabs.create({ url });
@@ -286,7 +293,10 @@ btnOpenYapd?.addEventListener("click", async () => {
 
 btnSaveConfig?.addEventListener("click", async () => {
   const token = cfgToken.value.trim();
-  const baseUrl = cfgYapdUrl.value.trim().replace(/\/+$/, "").replace(/\/api$/, "");
+  const baseUrl = cfgYapdUrl.value
+    .trim()
+    .replace(/\/+$/, "")
+    .replace(/\/api$/, "");
   const minScore = Number.parseInt(cfgMinScore.value, 10) || 30;
   const autoSend = cfgAutoSend.checked;
 

@@ -42,41 +42,70 @@ export class YapdApiClient {
     }
 
     const data = (await response.json()) as PairingResponse;
-    const cleanBaseUrl = yapdBaseUrl.trim().replace(/\/+$/, "").replace(/\/api$/, "");
+    const cleanBaseUrl = yapdBaseUrl
+      .trim()
+      .replace(/\/+$/, "")
+      .replace(/\/api$/, "");
     await extensionStorage.setState({ yapdBaseUrl: cleanBaseUrl });
     await extensionStorage.setPaired(data.accessToken, data.extensionId, data.settings);
     return data;
   }
 
-  async sendReport(payload: ReportExtensionPayload): Promise<{ batchId: string } | null> {
+  async sendReport(
+    payload: ReportExtensionPayload,
+  ): Promise<{ success: boolean; batchId?: string; message?: string }> {
     const state = await extensionStorage.getState();
     if (!state.paired || !state.token) {
       console.warn("[YAPD Sentinel] Extensão não está pareada. Relatório ignorado.");
-      return null;
+      return { success: false, message: "Extensão desconectada do YAPD." };
     }
 
     const endpoint = this.getApiEndpoint(state.yapdBaseUrl, "browser-extension/detections/report");
 
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${state.token}`,
-      },
-      body: JSON.stringify(payload),
-    });
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${state.token}`,
+        },
+        body: JSON.stringify(payload),
+      });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`[YAPD Sentinel] Falha ao enviar relatório (${response.status}): ${errorText}`);
-      if (response.status === 401 || response.status === 403) {
-        // Token revogado ou inválido
-        await extensionStorage.disconnect();
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(
+          `[YAPD Sentinel] Falha ao enviar relatório (${response.status}): ${errorText}`,
+        );
+        if (response.status === 401 || response.status === 403) {
+          // Token revogado ou inválido
+          await extensionStorage.disconnect();
+          return { success: false, message: "Sessão expirada ou token revogado no YAPD." };
+        }
+        let parsedMessage = errorText;
+        try {
+          const parsed = JSON.parse(errorText);
+          if (Array.isArray(parsed.message)) {
+            parsedMessage = parsed.message.join("; ");
+          } else if (parsed.message) {
+            parsedMessage = parsed.message;
+          }
+        } catch {
+          // Usa errorText bruto
+        }
+        return {
+          success: false,
+          message: `Falha ao salvar (${response.status}): ${parsedMessage}`,
+        };
       }
-      return null;
-    }
 
-    return (await response.json()) as { batchId: string };
+      const data = (await response.json()) as { batchId: string };
+      return { success: true, batchId: data.batchId };
+    } catch (err) {
+      const msg = (err as Error).message || "Erro de conexão";
+      console.error("[YAPD Sentinel] Erro ao comunicar com YAPD:", err);
+      return { success: false, message: `Erro de rede ao conectar no YAPD: ${msg}` };
+    }
   }
 
   async applyBlockTarget(
@@ -141,7 +170,10 @@ export class YapdApiClient {
 
       if (!response.ok) {
         const errorText = await response.text();
-        return { success: false, message: `Erro ao aplicar bloqueio (${response.status}): ${errorText}` };
+        return {
+          success: false,
+          message: `Erro ao aplicar bloqueio (${response.status}): ${errorText}`,
+        };
       }
 
       return { success: true };

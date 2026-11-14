@@ -50,5 +50,9 @@ import { MutationTracker } from "./mutation-tracker";
     });
   }
 
-  console.debug("[YAPS] Isolated Content Script ativo em", pageContext.domain, isTopFrame ? "(top)" : "(frame)");
+  console.debug(
+    "[YAPS] Isolated Content Script ativo em",
+    pageContext.domain,
+    isTopFrame ? "(top)" : "(frame)",
+  );
 })();

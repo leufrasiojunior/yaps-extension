@@ -95,7 +95,7 @@ if (typeof chrome !== "undefined" && chrome.runtime) {
       const effectiveTabId = message.tabId || tabId;
       const effectivePageDomain =
         message.pageDomain ||
-        (sender.tab?.url ? extractHostname(sender.tab.url) ?? undefined : undefined);
+        (sender.tab?.url ? (extractHostname(sender.tab.url) ?? undefined) : undefined);
 
       const summary = batchQueue.getPageSummary(effectivePageDomain, effectiveTabId);
       sendResponse(summary);
@@ -104,12 +104,13 @@ if (typeof chrome !== "undefined" && chrome.runtime) {
 
     if (message.type === "SAVE_PAGE_ANALYSIS_TO_YAPD") {
       const targetTabId = message.tabId || tabId;
-      if (!targetTabId) {
+      const targetDomain = message.pageDomain;
+      if (!targetTabId && !targetDomain) {
         sendResponse({ success: false, message: "Aba não identificada." });
         return true;
       }
 
-      batchQueue.flushSession(targetTabId).then((result) => {
+      batchQueue.flushSession(targetTabId, targetDomain).then((result) => {
         sendResponse(result);
       });
       return true;
@@ -123,7 +124,7 @@ if (typeof chrome !== "undefined" && chrome.runtime) {
           return;
         }
 
-        const summary = batchQueue.getPageSummary(undefined, targetTabId);
+        const summary = batchQueue.getPageSummary(message.page?.domain, targetTabId);
         const matchingItem = summary.targets.find(
           (t) => t.target.toLowerCase() === message.target.toLowerCase(),
         );

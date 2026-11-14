@@ -11,7 +11,12 @@ export class ElementPicker {
   private reviewDialog: HTMLDialogElement | null = null;
   private pageContext: PageContext;
   private originalWindowOpen: typeof window.open | null = null;
-  private neutralizedElements: Array<{ el: HTMLElement; pointerEvents: string; zIndex: string; opacity: string }> = [];
+  private neutralizedElements: Array<{
+    el: HTMLElement;
+    pointerEvents: string;
+    zIndex: string;
+    opacity: string;
+  }> = [];
 
   constructor(pageContext: PageContext) {
     this.pageContext = pageContext;
@@ -45,7 +50,9 @@ export class ElementPicker {
     // Isso garante que NENHUM script de anúncio da página capture o ponteiro antes da extensão
     this.attachCaptureListeners();
 
-    this.showToast("🎯 YAPD Sentinel: Clique no anúncio para revisar e bloquear (ESC para cancelar).");
+    this.showToast(
+      "🎯 YAPD Sentinel: Clique no anúncio para revisar e bloquear (ESC para cancelar).",
+    );
   }
 
   stop(): void {
@@ -307,7 +314,8 @@ export class ElementPicker {
   }
 
   private onMouseMove(e: MouseEvent): void {
-    if (!this.active || this.modalOpen || !this.backdrop || !this.highlightBox || !this.tooltip) return;
+    if (!this.active || this.modalOpen || !this.backdrop || !this.highlightBox || !this.tooltip)
+      return;
 
     const target = this.pickElementFromPoint(e.clientX, e.clientY);
 
@@ -815,7 +823,9 @@ export class ElementPicker {
         urls.push(`https:${trimmed}`);
       } else if (trimmed.includes("://") || trimmed.includes(".")) {
         // Tenta regex de URL se tiver código inline ou texto com URL
-        const matches = trimmed.match(/(?:https?:)?\/\/[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?(?:\/[^\s'"\)\]<>]*)?/gi);
+        const matches = trimmed.match(
+          /(?:https?:)?\/\/[a-z0-9.-]+\.[a-z]{2,}(?::\d+)?(?:\/[^\s'"\)\]<>]*)?/gi,
+        );
         if (matches) {
           for (const m of matches) {
             urls.push(m.startsWith("//") ? `https:${m}` : m);
@@ -882,7 +892,9 @@ export class ElementPicker {
 
     checkNode(el);
 
-    const children = el.querySelectorAll("a, img, iframe, script, source, video, audio, embed, object, div[data-src], div[data-url], div[data-href]");
+    const children = el.querySelectorAll(
+      "a, img, iframe, script, source, video, audio, embed, object, div[data-src], div[data-url], div[data-href]",
+    );
     for (const child of children) {
       checkNode(child);
     }
@@ -891,7 +903,9 @@ export class ElementPicker {
     let depth = 0;
     while (parent && depth < 6) {
       checkNode(parent);
-      const parentMedia = parent.querySelector("iframe, video, source, a[href^='http'], a[href^='//'], a[href*='.']");
+      const parentMedia = parent.querySelector(
+        "iframe, video, source, a[href^='http'], a[href^='//'], a[href*='.']",
+      );
       if (parentMedia) {
         checkNode(parentMedia);
       }
