@@ -72,4 +72,42 @@ describe("domain-utils", () => {
       "Explicitly flagged by user via interactive element picker",
     );
   });
+
+  it("produces evidence that maps cleanly to ReportTargetItem schema", () => {
+    const candidate = evaluateCandidate(
+      "https://onetag-sys.com/script.js",
+      "meuip.com.br",
+      "performance_resource",
+      {
+        elementTag: "script",
+        domPathHash: "hash-123",
+        width: 300,
+        height: 250,
+      },
+    );
+
+    expect(candidate).not.toBeNull();
+    // Verify mapped item schema properties
+    const mapped = {
+      candidateId: candidate?.candidateId,
+      target: candidate?.target.trim().toLowerCase(),
+      category: candidate?.category || "ads",
+      score: Math.max(0, Math.min(100, Math.round(candidate?.score || 0))),
+      riskLevel: candidate?.riskLevel,
+      reasons: candidate?.reasons,
+      evidence: {
+        url: candidate?.evidence.url?.slice(0, 2048),
+        source: candidate?.evidence.source.slice(0, 100),
+        resourceType: candidate?.evidence.resourceType?.slice(0, 100),
+        isThirdParty: Boolean(candidate?.evidence.isThirdParty),
+      },
+    };
+
+    expect(mapped.evidence).not.toHaveProperty("domPathHash");
+    expect(mapped.evidence).not.toHaveProperty("elementTag");
+    expect(mapped.evidence).not.toHaveProperty("dimensions");
+    expect(mapped).not.toHaveProperty("isBlocked");
+    expect(mapped.target).toBe("onetag-sys.com");
+    expect(mapped.score).toBeGreaterThan(0);
+  });
 });
