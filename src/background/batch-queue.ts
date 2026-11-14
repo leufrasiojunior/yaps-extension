@@ -1,4 +1,4 @@
-import { BATCH_DEBOUNCE_MS, MAX_BATCH_SIZE } from "../shared/constants";
+import { BATCH_DEBOUNCE_MS, EXTENSION_VERSION, MAX_BATCH_SIZE } from "../shared/constants";
 import { extractMainDomain } from "../shared/domain-utils";
 import type {
   DetectedTarget,
@@ -149,7 +149,7 @@ export class BatchQueueManager {
     const metadata: ExtensionMetadata = {
       name: state.deviceName,
       extensionId: state.extensionId,
-      version: "0.2.0",
+      version: EXTENSION_VERSION,
       browser: "Chrome",
       manifestVersion: 3,
     };

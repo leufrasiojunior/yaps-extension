@@ -1,5 +1,7 @@
 import type { ExtensionSettings, ExtensionStorageState } from "./types";
 
+export const EXTENSION_VERSION = "0.2.1";
+
 export const DEFAULT_MIN_SCORE_THRESHOLD = 30;
 
 export const DEFAULT_EXTENSION_SETTINGS: ExtensionSettings = {

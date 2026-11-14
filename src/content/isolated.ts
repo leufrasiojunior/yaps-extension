@@ -1,3 +1,4 @@
+import { EXTENSION_VERSION } from "../shared/constants";
 import type { PageContext, RuntimeMessage } from "../shared/types";
 import { ElementPicker } from "./element-picker";
 import { MutationTracker } from "./mutation-tracker";
@@ -21,12 +22,12 @@ import { MutationTracker } from "./mutation-tracker";
   if (isTopFrame) {
     try {
       document.documentElement.setAttribute("data-yapd-extension-installed", "true");
-      window.postMessage({ type: "YAPD_EXTENSION_PONG", version: "0.2.0" }, "*");
+      window.postMessage({ type: "YAPD_EXTENSION_PONG", version: EXTENSION_VERSION }, "*");
 
       window.addEventListener("message", (event) => {
         if (event.data?.type === "YAPD_EXTENSION_PING") {
           document.documentElement.setAttribute("data-yapd-extension-installed", "true");
-          window.postMessage({ type: "YAPD_EXTENSION_PONG", version: "0.2.0" }, "*");
+          window.postMessage({ type: "YAPD_EXTENSION_PONG", version: EXTENSION_VERSION }, "*");
         }
       });
     } catch {

@@ -1,3 +1,4 @@
+import { EXTENSION_VERSION } from "../shared/constants";
 import type {
   DetectedTarget,
   ExtensionSettings,
@@ -32,7 +33,7 @@ export class YapdApiClient {
         extensionName: deviceName,
         browser: "Chrome",
         manifestVersion: 3,
-        extensionVersion: "0.2.0",
+        extensionVersion: EXTENSION_VERSION,
       }),
     });
 
@@ -127,7 +128,7 @@ export class YapdApiClient {
       extension: {
         name: state.deviceName,
         extensionId: state.extensionId,
-        version: "0.2.0",
+        version: EXTENSION_VERSION,
         browser: "Chrome",
         manifestVersion: 3,
       },

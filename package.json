@@ -1,11 +1,12 @@
 {
   "name": "yaps-extension",
-  "version": "0.1.0",
+  "version": "0.2.1",
   "description": "Extensao de navegador (Chrome/Edge MV3) para auditoria e deteccao de anuncios e dominios integrada ao YAPD",
   "type": "module",
   "scripts": {
     "dev": "node scripts/build.js --watch",
-    "build": "tsc --noEmit && node scripts/build.js && python3 scripts/create-zip.py",
+    "icons": "node scripts/generate-icons.js",
+    "build": "node scripts/generate-icons.js && tsc --noEmit && node scripts/build.js && python3 scripts/create-zip.py",
     "package": "python3 scripts/create-zip.py",
     "typecheck": "tsc --noEmit",
     "lint": "biome check src",
