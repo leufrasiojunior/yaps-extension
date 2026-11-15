@@ -1,6 +1,6 @@
 {
   "name": "yaps-extension",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Extensao de navegador (Chrome/Edge MV3) para auditoria e deteccao de anuncios e dominios integrada ao YAPD",
   "type": "module",
   "scripts": {
